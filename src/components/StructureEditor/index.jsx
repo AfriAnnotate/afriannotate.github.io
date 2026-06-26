@@ -1,0 +1,1859 @@
+import { useState, useEffect, useMemo, useCallback, useRef } from 'react';
+import ReactDOM from 'react-dom';
+import clsx from 'clsx';
+import useDocusaurusContext from '@docusaurus/useDocusaurusContext';
+import {
+  fetchDocsTree,
+  computeDocsTree,
+  createStructurePR,
+  fetchRawFile,
+  verifyGitHubToken,
+  rawUrl,
+} from '@site/src/utils/github';
+import mammoth from 'mammoth';
+import { splitFrontmatter, slugify, setFrontmatterField, mdToHtml, htmlToMd, extractDataUriImages, IMAGE_DIR } from '@site/src/utils/markdown';
+import { WysiwygEditor } from '@site/src/components/WysiwygEditor';
+import { AuthPanel } from './AuthPanel';
+import { InlineForm, TreeRow } from './TreeRow';
+import { useLocalStorage } from '@site/src/hooks/useLocalStorage';
+import styles from './index.module.css';
+
+const AUTH_KEY = 'masakhane_pb_auth';
+const CHANGES_KEY = 'masakhane_pb_changes';
+
+// All languages supported by the translation proxy
+// European/Arabic/Swahili → Helsinki-NLP via HF; African languages → MyMemory
+const SUPPORTED_AUTO_TRANSLATE = new Set(['fr', 'ar', 'sw', 'de', 'es', 'pt', 'ha', 'yo', 'am', 'ig', 'zu', 'om', 'so', 'rw']);
+
+/**
+ * Sends one text chunk to the translation proxy. Falls back to the original
+ * `text` when the response lacks `translation_text` (e.g. empty or error body).
+ */
+async function autoTranslateChunk(text, tgtLang, proxyUrl) {
+  const res = await fetch(proxyUrl, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ text, tgt_lang: tgtLang }),
+  });
+  const contentType = res.headers.get('Content-Type') || '';
+  if (!contentType.includes('application/json')) {
+    throw new Error(`Worker returned unexpected response (HTTP ${res.status}) — check TRANSLATION_PROXY_URL`);
+  }
+  const data = await res.json();
+  if (data.error) {
+    throw new Error(data.error);
+  }
+  return data[0]?.translation_text || text;
+}
+
+/**
+ * Translates block-level text nodes in an HTML string in-place.
+ * Replaces each block's `textContent` (not innerHTML), so any nested tags
+ * (links, bold, code) are flattened — intentional to keep the proxy payload clean.
+ * Blocks shorter than 3 chars are skipped to avoid wasting proxy quota.
+ */
+async function translateHtmlContent(html, tgtLang, proxyUrl) {
+  const div = document.createElement('div');
+  div.innerHTML = html;
+  const blocks = Array.from(div.querySelectorAll('p, h1, h2, h3, h4, h5, h6, li, td, th'));
+  for (const block of blocks) {
+    const text = block.textContent.trim();
+    if (text.length < 3) continue;
+    block.textContent = await autoTranslateChunk(text, tgtLang, proxyUrl);
+  }
+  return div.innerHTML;
+}
+
+
+function starterPage(title, position) {
+  return `---\nsidebar_position: ${position}\n---\n\n# ${title}\n\nAdd content here.\n`;
+}
+
+function starterCategory(label, position, description = '') {
+  const link = description
+    ? { type: 'generated-index', description }
+    : { type: 'generated-index' };
+  return JSON.stringify({ label, position, link }, null, 2);
+}
+
+/** Strip a leading chapter number ("11. ", "11- ", "11) ") from a typed title. */
+function stripChapterNumber(title) {
+  return String(title).replace(/^\s*\d+\s*[.\-)]\s+/, '').trim();
+}
+
+/**
+ * Derive a top-level chapter's folder slug and display label from a raw title.
+ * Convention (matches the hand-authored chapters): the folder name carries NO
+ * number prefix — Docusaurus strips "NN-" from URLs anyway — and the chapter
+ * number lives in `position` (ordering) plus a "NN. " prefix on the label.
+ * Any number the author typed into the title is stripped first so it can't leak
+ * back into the folder slug or get doubled in the label.
+ */
+function makeChapter(rawLabel, position) {
+  const title = stripChapterNumber(rawLabel) || String(rawLabel).trim();
+  return { slug: slugify(title), label: `${position}. ${title}` };
+}
+
+/* ── Modal content ───────────────────────────────────────────────────── */
+
+/**
+ * Full structure-editor UI mounted inside the modal portal.
+ * @param {{ onClose: () => void }} props
+ *   onClose — called when the user clicks × or presses Escape; the portal
+ *   wrapper is responsible for unmounting this component.
+ */
+export function StructureEditorContent({ onClose }) {
+  const { siteConfig } = useDocusaurusContext();
+  const oauthClientId = siteConfig.customFields?.GITHUB_OAUTH_CLIENT_ID || '';
+  const oauthProxyUrl    = siteConfig.customFields?.GITHUB_OAUTH_PROXY_URL || '';
+  const translationProxy = siteConfig.customFields?.TRANSLATION_PROXY_URL || '';
+  // On localhost the popup redirect_uri won't match GitHub's registered callback,
+  // so we leave callbackUrl empty — canPopup becomes false and device flow is used instead.
+  const oauthCallbackUrl = typeof window !== 'undefined' && window.location.hostname !== 'localhost'
+    ? `${window.location.origin}${siteConfig.baseUrl}oauth-callback`
+    : '';
+
+  // Auth: read synchronously from localStorage so the first tree fetch can use the token
+  const [auth, setAuth] = useLocalStorage(AUTH_KEY, null);
+
+  // Tree data
+  const [gitFiles, setGitFiles] = useState([]);
+  const [catData, setCatData] = useState({});
+  const [pageCache, setPageCache] = useState({});
+
+  // Changes: persisted in localStorage
+  const [changes, setChanges] = useLocalStorage(CHANGES_KEY, {});
+
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState('');
+  const [loadingPaths, setLoadingPaths] = useState(new Set());
+
+  const [submitting, setSubmitting] = useState(false);
+  const [success, setSuccess] = useState(null);
+  const [submitError, setSubmitError] = useState('');
+
+  const [expanded, setExpanded] = useState(new Set());
+  const [activeForm, setActiveForm] = useState(null);
+  const [rightPanel, setRightPanel] = useState(null);
+
+  // Resizable dialog, panel splitter, and fullscreen
+  const [modalSize, setModalSize] = useState({ width: 1120, height: 780 });
+  const [modalPos,  setModalPos]  = useState(null); // { x, y } | null = centered
+  const [leftWidth, setLeftWidth] = useState(320);
+  const [leftHidden, setLeftHidden] = useState(false);
+  const [fullscreen, setFullscreen] = useState(false);
+  const [translateSplitWidth, setTranslateSplitWidth] = useState(null); // null = 50/50 until first drag
+  const originalLeftWidthRef = useRef(320);
+
+  // Data-URIs of images extracted this session, keyed by their repo image path.
+  // Used to preview pending (not-yet-committed) images in the editor.
+  const assetUris = useRef({});
+
+  // Translation tab
+  const [rightPanelTab, setRightPanelTab] = useState('edit'); // 'edit' | 'translate'
+  const [translationLang, setTranslationLang] = useState('ha');
+  const [translationHtml, setTranslationHtml] = useState('');
+  const [translateKey, setTranslateKey] = useState(0);
+  const [translating, setTranslating] = useState(false);
+  const [translateError, setTranslateError] = useState('');
+  const [uploadPreview, setUploadPreview] = useState(null); // { fileName, title, titleFromH1, markdown }
+  const [uploadBatch, setUploadBatch] = useState(null);    // [{ fileName, title, titleFromH1, markdown }]
+  const [uploadPlacement, setUploadPlacement] = useState('page'); // 'page' | 'section' | 'subsection'
+  const [uploadTargetSection, setUploadTargetSection] = useState('');
+  const [uploadSectionName, setUploadSectionName] = useState('');
+
+  // Auto-resize left panel when fork error appears/disappears
+  useEffect(() => {
+    const isForkError = submitError && submitError.includes('don\'t have write access');
+    if (isForkError) {
+      originalLeftWidthRef.current = leftWidth;
+      setLeftWidth(550); // Wider for fork instructions
+    } else if (submitError === '') {
+      setLeftWidth(originalLeftWidthRef.current); // Restore original
+    }
+  }, [submitError]);
+
+  function handleHeaderMouseDown(e) {
+    if (fullscreen) return;
+    if (e.target.closest('button')) return;
+    e.preventDefault();
+    const startLeft = modalPos ? modalPos.x : (window.innerWidth  - modalSize.width)  / 2;
+    const startTop  = modalPos ? modalPos.y : (window.innerHeight - modalSize.height) / 2;
+    const offsetX   = e.clientX - startLeft;
+    const offsetY   = e.clientY - startTop;
+    document.body.style.cursor     = 'move';
+    document.body.style.userSelect = 'none';
+    function onMove(ev) {
+      setModalPos({
+        x: Math.max(0, Math.min(window.innerWidth  - modalSize.width,  ev.clientX - offsetX)),
+        y: Math.max(0, Math.min(window.innerHeight - modalSize.height, ev.clientY - offsetY)),
+      });
+    }
+    function onUp() {
+      document.body.style.cursor     = '';
+      document.body.style.userSelect = '';
+      document.removeEventListener('mousemove', onMove);
+      document.removeEventListener('mouseup',   onUp);
+    }
+    document.addEventListener('mousemove', onMove);
+    document.addEventListener('mouseup',   onUp);
+  }
+
+  function handleResizeMouseDown(e, dirs) {
+    e.preventDefault();
+    e.stopPropagation();
+    const startX  = e.clientX;
+    const startY  = e.clientY;
+    const startW  = modalSize.width;
+    const startH  = modalSize.height;
+    const startLeft = modalPos ? modalPos.x : (window.innerWidth  - startW) / 2;
+    const startTop  = modalPos ? modalPos.y : (window.innerHeight - startH) / 2;
+
+    const cursorMap = {
+      top: 'n-resize', bottom: 's-resize', left: 'w-resize', right: 'e-resize',
+      'top-left': 'nw-resize', 'top-right': 'ne-resize',
+      'bottom-left': 'sw-resize', 'bottom-right': 'se-resize',
+    };
+    const key = [dirs.top && 'top', dirs.bottom && 'bottom', dirs.left && 'left', dirs.right && 'right'].filter(Boolean).join('-');
+    document.body.style.cursor     = cursorMap[key] || 'default';
+    document.body.style.userSelect = 'none';
+
+    function onMove(ev) {
+      const dx = ev.clientX - startX;
+      const dy = ev.clientY - startY;
+      let newW = startW, newH = startH, newX = startLeft, newY = startTop;
+
+      if (dirs.right)  newW = Math.max(600, Math.min(window.innerWidth  - startLeft - 8, startW + dx));
+      if (dirs.bottom) newH = Math.max(400, Math.min(window.innerHeight - startTop  - 8, startH + dy));
+      if (dirs.left)  { newW = Math.max(600, startW - dx); newX = startLeft + (startW - newW); }
+      if (dirs.top)   { newH = Math.max(400, startH - dy); newY = startTop  + (startH - newH); }
+
+      setModalSize({ width: newW, height: newH });
+      setModalPos({ x: newX, y: newY });
+    }
+    function onUp() {
+      document.body.style.cursor     = '';
+      document.body.style.userSelect = '';
+      document.removeEventListener('mousemove', onMove);
+      document.removeEventListener('mouseup',   onUp);
+    }
+    document.addEventListener('mousemove', onMove);
+    document.addEventListener('mouseup',   onUp);
+  }
+
+  const tree = useMemo(() => computeDocsTree(gitFiles, catData, changes), [gitFiles, catData, changes]);
+
+  // Fetch tree — use auth token when available (5000 req/hr vs 60/hr unauthenticated)
+  const loadTree = useCallback((token) => {
+    setLoading(true);
+    setError('');
+    return fetchDocsTree(token || null)
+      .then(({ files, cats }) => {
+        setGitFiles(files);
+        setCatData(cats);
+        // Keep sections collapsed by default
+        setExpanded(new Set());
+      })
+      .catch(e => {
+        const is403 = e.message?.includes('403');
+        setError(is403
+          ? 'GitHub rate limit reached. Sign in with GitHub below to load the tree.'
+          : `Failed to load playbook tree: ${e.message}`);
+      })
+      .finally(() => setLoading(false));
+  }, []);
+
+  useEffect(() => { loadTree(auth?.token); }, []);  // initial load
+
+  // Retry tree load when user signs in (clears a previous 403 rate-limit error)
+  const prevAuthToken = useRef(null);
+  const uploadInputRef = useRef(null);
+  useEffect(() => {
+    if (auth?.token && auth.token !== prevAuthToken.current && error?.includes('rate limit')) {
+      prevAuthToken.current = auth.token;
+      loadTree(auth.token);
+    } else if (auth?.token) {
+      prevAuthToken.current = auth.token;
+    }
+  }, [auth?.token, error, loadTree]);
+
+  // Hide body overflow when modal is open
+  useEffect(() => {
+    const originalOverflow = document.body.style.overflow;
+    document.body.style.overflow = 'hidden';
+    return () => {
+      document.body.style.overflow = originalOverflow;
+    };
+  }, []);
+
+  /* ── Auth ─────────────────────────────────────────────────────────────── */
+
+  async function handleConnect(token) {
+    const info = await verifyGitHubToken(token);
+    setAuth({ token, ...info });
+  }
+
+  function handleDisconnect() {
+    setAuth(null);
+  }
+
+  /* ── Document upload ──────────────────────────────────────────────────── */
+
+  async function extractPageImages(page, pdfjsLib) {
+    const MIN_PX = 20;
+    const images = [];
+    const seen = new Set();
+
+    let ops;
+    try { ops = await page.getOperatorList(); } catch { return images; }
+
+    async function fetchObj(name) {
+      return new Promise(resolve => {
+        try { page.objs.get(name, resolve); }
+        catch { try { page.commonObjs.get(name, resolve); } catch { resolve(null); } }
+      });
+    }
+
+    function renderToDataUrl(imgData) {
+      if (!imgData?.data || imgData.width < MIN_PX || imgData.height < MIN_PX) return null;
+      const canvas = document.createElement('canvas');
+      canvas.width = imgData.width;
+      canvas.height = imgData.height;
+      const ctx = canvas.getContext('2d');
+      const id = ctx.createImageData(imgData.width, imgData.height);
+      id.data.set(imgData.data);
+      ctx.putImageData(id, 0, 0);
+      return canvas.toDataURL('image/png');
+    }
+
+    for (let i = 0; i < ops.fnArray.length; i++) {
+      if (ops.fnArray[i] === pdfjsLib.OPS.paintImageXObject) {
+        const name = ops.argsArray[i][0];
+        if (seen.has(name)) continue;
+        seen.add(name);
+        const imgData = await fetchObj(name);
+        const dataUrl = renderToDataUrl(imgData);
+        if (dataUrl) images.push(dataUrl);
+
+      } else if (ops.fnArray[i] === pdfjsLib.OPS.paintInlineImageXObject) {
+        const imgData = ops.argsArray[i][0];
+        const dataUrl = renderToDataUrl(imgData);
+        if (dataUrl) images.push(dataUrl);
+      }
+    }
+    return images;
+  }
+
+  async function pdfToMarkdown(pdf, pdfjsLib) {
+    const pages = [];
+    for (let p = 1; p <= pdf.numPages; p++) {
+      const page = await pdf.getPage(p);
+      const [content, images] = await Promise.all([
+        page.getTextContent(),
+        extractPageImages(page, pdfjsLib),
+      ]);
+      pages.push({ items: content.items, images });
+    }
+
+    const allItems = pages.flatMap(p => p.items).filter(item => item.str?.trim());
+    const heights = allItems
+      .map(item => Math.abs(item.transform?.[3] || 0))
+      .filter(h => h > 2)
+      .sort((a, b) => a - b);
+    const bodySize = heights[Math.floor(heights.length * 0.4)] || 12;
+
+    const mdParts = [];
+    let paraBuffer = [];
+
+    function flushPara() {
+      if (paraBuffer.length) {
+        mdParts.push(paraBuffer.join(' '));
+        paraBuffer = [];
+      }
+    }
+
+    for (const { items, images } of pages) {
+      const sorted = [...items]
+        .filter(item => item.str?.trim())
+        .sort((a, b) => {
+          const ay = a.transform?.[5] ?? 0;
+          const by = b.transform?.[5] ?? 0;
+          return by - ay || (a.transform?.[4] ?? 0) - (b.transform?.[4] ?? 0);
+        });
+
+      let lineY = null;
+      let lineItems = [];
+      let lineMaxH = 0;
+
+      function flushLine() {
+        if (!lineItems.length) return;
+        const text = lineItems.map(i => i.str).join(' ').replace(/\s+/g, ' ').trim();
+        if (!text) return;
+        const ratio = lineMaxH / bodySize;
+        if (ratio >= 1.8) { flushPara(); mdParts.push(`# ${text}`); }
+        else if (ratio >= 1.4) { flushPara(); mdParts.push(`## ${text}`); }
+        else if (ratio >= 1.15) { flushPara(); mdParts.push(`### ${text}`); }
+        else paraBuffer.push(text);
+        lineItems = [];
+        lineMaxH = 0;
+      }
+
+      for (const item of sorted) {
+        const y = item.transform?.[5] ?? 0;
+        const h = Math.abs(item.transform?.[3] ?? bodySize);
+        if (lineY === null || Math.abs(y - lineY) > bodySize * 0.5) {
+          flushLine();
+          lineY = y;
+        }
+        lineItems.push(item);
+        lineMaxH = Math.max(lineMaxH, h);
+      }
+      flushLine();
+      flushPara();
+
+      // Append extracted images after each page's text
+      for (const dataUrl of images) {
+        mdParts.push(`![](${dataUrl})`);
+      }
+    }
+
+    return mdParts.join('\n\n').replace(/\n{3,}/g, '\n\n').trim();
+  }
+
+  async function parseUploadFile(file) {
+    const ext = file.name.split('.').pop().toLowerCase();
+    let markdown = '';
+    try {
+      if (ext === 'pdf') {
+        const pdfjsLib = await import('pdfjs-dist/legacy/build/pdf');
+        pdfjsLib.GlobalWorkerOptions.workerSrc =
+          `//unpkg.com/pdfjs-dist@${pdfjsLib.version}/build/pdf.worker.min.js`;
+        const arrayBuffer = await file.arrayBuffer();
+        const pdf = await pdfjsLib.getDocument({ data: arrayBuffer }).promise;
+        markdown = await pdfToMarkdown(pdf, pdfjsLib);
+      } else if (ext === 'docx') {
+        const arrayBuffer = await file.arrayBuffer();
+        const result = await mammoth.convertToHtml({ arrayBuffer }, {
+          styleMap: [
+            'p[style-name="Heading 1"] => h1:fresh',
+            'p[style-name="Heading 2"] => h2:fresh',
+            'p[style-name="Heading 3"] => h3:fresh',
+            'p[style-name="Heading 4"] => h4:fresh',
+            'p[style-name="Heading 5"] => h5:fresh',
+            'p[style-name="Heading 6"] => h6:fresh',
+            'p[style-name="Normal"] => p:fresh',
+          ],
+          convertImage: mammoth.images.imgElement(image =>
+            image.read('base64').then(b64 => ({
+              src: `data:${image.contentType};base64,${b64}`,
+            }))
+          ),
+        });
+        markdown = htmlToMd(result.value);
+      } else {
+        const text = await file.text();
+        if (ext === 'md' || ext === 'mdx') markdown = text;
+        else if (ext === 'txt') markdown = text.split(/\n{2,}/).map(p => p.trim()).filter(Boolean).map(p => p.replace(/\n/g, ' ')).join('\n\n');
+        else if (ext === 'html' || ext === 'htm') markdown = htmlToMd(text);
+        else return null;
+      }
+    } catch (err) {
+      console.error('[upload] parse error:', file.name, err);
+      return null;
+    }
+    // Split by h1 headings to create separate pages, preserving document order
+    const h1Pattern = /^#\s+(.+)$/gm;
+    const h1Matches = Array.from(markdown.matchAll(h1Pattern));
+
+    if (h1Matches.length > 1) {
+      // Multiple h1 headings: split into separate pages while preserving order
+      const sections = [];
+
+      for (let i = 0; i < h1Matches.length; i++) {
+        const match = h1Matches[i];
+        const title = match[1].trim();
+
+        // Get the start position of this h1
+        const startPos = match.index;
+
+        // Get the start position of the next h1 (or end of markdown)
+        const endPos = i + 1 < h1Matches.length
+          ? h1Matches[i + 1].index
+          : markdown.length;
+
+        // Extract the section: from this h1 to the start of next h1
+        const sectionMarkdown = markdown.substring(startPos, endPos).trim();
+
+        sections.push({
+          fileName: file.name,
+          title,
+          titleFromH1: true,
+          markdown: sectionMarkdown
+        });
+      }
+
+      return sections;
+    } else {
+      // Single h1 or no h1: treat as one page
+      const h1 = markdown.match(/^#\s+(.+)$/m);
+      const titleFromH1 = !!h1;
+      const title = h1 ? h1[1].trim() : file.name.replace(/\.[^.]+$/, '').replace(/[-_]+/g, ' ');
+      return [{ fileName: file.name, title, titleFromH1, markdown }];
+    }
+  }
+
+  async function handleUploadFile(e) {
+    const files = Array.from(e.target.files || []);
+    if (!files.length) return;
+    e.target.value = '';
+
+    const defaultSection = tree.find(n => n.type === 'section')?.path ?? '';
+
+    // Parse all files and flatten results
+    const allItems = (await Promise.all(files.map(parseUploadFile)))
+      .filter(Boolean)
+      .flat();
+
+    if (!allItems.length) return;
+
+    if (allItems.length === 1) {
+      setUploadPreview(allItems[0]);
+      setUploadPlacement('page');
+      setUploadTargetSection(defaultSection);
+      setUploadSectionName('');
+    } else {
+      setUploadBatch(allItems);
+      setUploadPlacement('section');
+      setUploadTargetSection(defaultSection);
+      setUploadSectionName('');
+    }
+  }
+
+  function buildUploadContent(markdown, title, position) {
+    const { frontmatter } = splitFrontmatter(markdown);
+    if (!frontmatter) {
+      return `---\nsidebar_position: ${position}\nsidebar_label: ${JSON.stringify(title)}\n---\n\n${markdown}`;
+    }
+    let c = setFrontmatterField(markdown, 'sidebar_position', position);
+    c = setFrontmatterField(c, 'sidebar_label', JSON.stringify(title));
+    return c;
+  }
+
+  function flatSections(nodes) {
+    return nodes.flatMap(n =>
+      n.type === 'section' ? [n, ...flatSections(n.children)] : []
+    );
+  }
+
+  function handleConfirmUpload() {
+    if (!uploadPreview) return;
+    const { title, markdown } = uploadPreview;
+    const pageSlug = slugify(title);
+
+    if (uploadPlacement === 'page') {
+      const sectionNode = flatSections(tree).find(n => n.path === uploadTargetSection);
+      if (!sectionNode) return;
+      const path = `${sectionNode.path}/${pageSlug}.md`;
+      const position = sectionNode.children.length + 1;
+      upsert(path, buildUploadContent(markdown, title, position));
+
+    } else if (uploadPlacement === 'section') {
+      const position = tree.filter(n => n.type === 'section')
+        .reduce((m, n) => Math.max(m, isFinite(n.position) ? n.position : 0), 0) + 1;
+      const { slug, label } = makeChapter(uploadSectionName.trim() || title, position);
+      upsert(`docs/${slug}/_category_.json`, starterCategory(label, position));
+      upsert(`docs/${slug}/${pageSlug}.md`, buildUploadContent(markdown, title, 1));
+      setExpanded(prev => new Set([...prev, `docs/${slug}`]));
+
+    } else if (uploadPlacement === 'subsection') {
+      const parentNode = flatSections(tree).find(n => n.path === uploadTargetSection);
+      if (!parentNode) return;
+      const label = uploadSectionName.trim() || title;
+      const subSlug = slugify(label);
+      const subPath = `${parentNode.path}/${subSlug}`;
+      const subPos = parentNode.children.length + 1;
+      upsert(`${subPath}/_category_.json`, starterCategory(label, subPos));
+      upsert(`${subPath}/${pageSlug}.md`, buildUploadContent(markdown, title, 1));
+      setExpanded(prev => new Set([...prev, parentNode.path, subPath]));
+    }
+
+    setUploadPreview(null);
+    setUploadTargetSection('');
+    setUploadSectionName('');
+  }
+
+  function handleConfirmBatch() {
+    if (!uploadBatch?.length) return;
+
+    if (uploadPlacement === 'page') {
+      const sectionNode = flatSections(tree).find(n => n.path === uploadTargetSection);
+      if (!sectionNode) return;
+      uploadBatch.forEach((item, i) => {
+        const path = `${sectionNode.path}/${slugify(item.title)}.md`;
+        upsert(path, buildUploadContent(item.markdown, item.title, sectionNode.children.length + 1 + i));
+      });
+
+    } else if (uploadPlacement === 'section') {
+      // Create ONE top-level section and add all items as pages within it
+      const position = tree.filter(n => n.type === 'section')
+        .reduce((m, n) => Math.max(m, isFinite(n.position) ? n.position : 0), 0) + 1;
+      const { slug, label } = makeChapter(uploadSectionName.trim() || uploadBatch[0].title, position);
+      upsert(`docs/${slug}/_category_.json`, starterCategory(label, position));
+
+      // Add all batch items as pages within this section, preserving order
+      uploadBatch.forEach((item, i) => {
+        upsert(`docs/${slug}/${slugify(item.title)}.md`, buildUploadContent(item.markdown, item.title, i + 1));
+      });
+      setExpanded(prev => new Set([...prev, `docs/${slug}`]));
+
+    } else if (uploadPlacement === 'subsection') {
+      const parentNode = flatSections(tree).find(n => n.path === uploadTargetSection);
+      if (!parentNode) return;
+      const label = uploadSectionName.trim() || uploadBatch[0].title;
+      const subSlug = slugify(label);
+      const subPath = `${parentNode.path}/${subSlug}`;
+      const subPos = parentNode.children.length + 1;
+      upsert(`${subPath}/_category_.json`, starterCategory(label, subPos));
+      uploadBatch.forEach((item, i) => {
+        upsert(`${subPath}/${slugify(item.title)}.md`, buildUploadContent(item.markdown, item.title, i + 1));
+      });
+      setExpanded(prev => new Set([...prev, parentNode.path, subPath]));
+    }
+
+    setUploadBatch(null);
+    setUploadTargetSection('');
+    setUploadSectionName('');
+  }
+
+  /* ── Resize handlers ──────────────────────────────────────────────────── */
+
+  function handleSplitterMouseDown(e) {
+    e.preventDefault();
+    const startX = e.clientX;
+    const startWidth = leftWidth;
+    document.body.style.cursor = 'col-resize';
+    document.body.style.userSelect = 'none';
+    function onMove(ev) {
+      setLeftWidth(Math.max(180, Math.min(560, startWidth + ev.clientX - startX)));
+    }
+    function onUp() {
+      document.body.style.cursor = '';
+      document.body.style.userSelect = '';
+      document.removeEventListener('mousemove', onMove);
+      document.removeEventListener('mouseup', onUp);
+    }
+    document.addEventListener('mousemove', onMove);
+    document.addEventListener('mouseup', onUp);
+  }
+
+  function handleTranslateSplitterMouseDown(e) {
+    e.preventDefault();
+    const container = e.currentTarget.parentElement;
+    const startX = e.clientX;
+    const startWidth = translateSplitWidth ?? container.offsetWidth / 2;
+    document.body.style.cursor = 'col-resize';
+    document.body.style.userSelect = 'none';
+    function onMove(ev) {
+      const max = container.offsetWidth - 204;
+      setTranslateSplitWidth(Math.max(200, Math.min(max, startWidth + ev.clientX - startX)));
+    }
+    function onUp() {
+      document.body.style.cursor = '';
+      document.body.style.userSelect = '';
+      document.removeEventListener('mousemove', onMove);
+      document.removeEventListener('mouseup', onUp);
+    }
+    document.addEventListener('mousemove', onMove);
+    document.addEventListener('mouseup', onUp);
+  }
+
+  /* ── Change helpers ─────────────────────────────────────────────────── */
+
+  function upsert(path, content) {
+    // For markdown pages, extract any embedded base64 images into real files
+    // co-located in an `images/` folder next to the page, and reference them by
+    // a relative `images/<name>` path instead of bloating the page with data-URIs.
+    if (typeof content === 'string' && path.endsWith('.md')) {
+      const dir = path.replace(/\/[^/]+$/, '');
+      // Editor previews show committed images via their raw URL; turn those back
+      // into co-located `images/` references before saving.
+      const normalized = content.split(`${rawUrl(`${dir}/${IMAGE_DIR}/`)}`).join(`${IMAGE_DIR}/`);
+
+      if (normalized.includes('data:')) {
+        const baseName = path.replace(/^.*\//, '').replace(/\.[^.]+$/, '');
+        const { markdown, assets } = extractDataUriImages(normalized, baseName);
+        setChanges(prev => {
+          const next = { ...prev, [path]: { op: 'upsert', content: markdown } };
+          for (const a of assets) {
+            const assetPath = `${dir}/${IMAGE_DIR}/${a.name}`;
+            assetUris.current[assetPath] = `data:${a.contentType};base64,${a.base64}`;
+            next[assetPath] = { op: 'upsert', content: a.base64, encoding: 'base64' };
+          }
+          return next;
+        });
+        return;
+      }
+      setChanges(prev => ({ ...prev, [path]: { op: 'upsert', content: normalized } }));
+      return;
+    }
+    setChanges(prev => ({ ...prev, [path]: { op: 'upsert', content } }));
+  }
+
+  /**
+   * Rewrites co-located `images/<file>` image references to a URL the browser
+   * can actually render in the editor preview: the pending image's in-memory
+   * data-URI when available, otherwise the committed raw GitHub URL.
+   */
+  function resolveAssetsForDisplay(md, mdPath) {
+    const dir = mdPath.replace(/\/[^/]+$/, '');
+    const toUrl = name => assetUris.current[`${dir}/${IMAGE_DIR}/${name}`] || rawUrl(`${dir}/${IMAGE_DIR}/${name}`);
+    return String(md)
+      .replace(/!\[([^\]]*)\]\((?:\.\/)?images\/([^)\s]+)\)/g, (_m, alt, name) => `![${alt}](${toUrl(name)})`)
+      .replace(/(<img\b[^>]*?\bsrc=["'])(?:\.\/)?images\/([^"']+)(["'][^>]*>)/gi, (_m, pre, name, post) => `${pre}${toUrl(name)}${post}`);
+  }
+
+  function del(path) {
+    setChanges(prev => ({ ...prev, [path]: { op: 'delete' } }));
+  }
+
+  function undoChange(path) {
+    setChanges(prev => { const n = { ...prev }; delete n[path]; return n; });
+    if (rightPanel?.path === path) setRightPanel(null);
+  }
+
+  function clearAllChanges() {
+    if (!window.confirm('Discard all pending changes?')) return;
+    setChanges({});
+    setRightPanel(null);
+  }
+
+  async function getPageContent(path) {
+    if (changes[path]?.op === 'upsert') return changes[path].content;
+    if (pageCache[path]) return pageCache[path];
+    const content = await fetchRawFile(path);
+    setPageCache(prev => ({ ...prev, [path]: content }));
+    return content;
+  }
+
+  function setNodeLoading(path, on) {
+    setLoadingPaths(prev => {
+      const n = new Set(prev);
+      on ? n.add(path) : n.delete(path);
+      return n;
+    });
+  }
+
+  /* ── Right panel ─────────────────────────────────────────────────────── */
+
+  async function handleEditSection(node) {
+    const indexPath = `${node.path}/index.md`;
+    if (rightPanel?.path === indexPath && !rightPanel.fetching) return;
+    setRightPanel({ path: indexPath, htmlContent: null, frontmatter: '', fetching: true, dirty: false });
+    setRightPanelTab('edit');
+    setTranslationHtml('');
+    try {
+      const md = await getPageContent(indexPath);
+      const { frontmatter, content } = splitFrontmatter(md);
+      setRightPanel({ path: indexPath, htmlContent: mdToHtml(resolveAssetsForDisplay(content, indexPath)), frontmatter, fetching: false, dirty: false });
+    } catch {
+      // File doesn't exist yet — open a blank starter (saved to pendingChanges on save)
+      const starter = `---\nsidebar_label: ${JSON.stringify(node.label)}\nsidebar_position: 0\n---\n\n# ${node.label}\n\n`;
+      const { frontmatter, content } = splitFrontmatter(starter);
+      setRightPanel({ path: indexPath, htmlContent: mdToHtml(content), frontmatter, fetching: false, dirty: true });
+    }
+  }
+
+  async function handleEditPage(node) {
+    if (rightPanel?.path === node.path && !rightPanel.fetching) return;
+    setRightPanel({ path: node.path, htmlContent: null, frontmatter: '', fetching: true, dirty: false });
+    setRightPanelTab('edit');
+    setTranslationHtml('');
+    try {
+      const md = await getPageContent(node.path);
+      const { frontmatter, content } = splitFrontmatter(md);
+      setRightPanel({ path: node.path, htmlContent: mdToHtml(resolveAssetsForDisplay(content, node.path)), frontmatter, fetching: false, dirty: false });
+    } catch (e) {
+      setError(`Could not load page: ${e.message}`);
+      setRightPanel(null);
+    }
+  }
+
+  function saveRightPanel() {
+    if (!rightPanel || rightPanel.fetching) return;
+    const md = htmlToMd(rightPanel.htmlContent);
+    upsert(rightPanel.path, (rightPanel.frontmatter || '') + md + '\n');
+    setRightPanel(prev => ({ ...prev, dirty: false }));
+  }
+
+  function translationFilePath(docPath, lang) {
+    return `i18n/${lang}/docusaurus-plugin-content-docs/current/${docPath.replace(/^docs\//, '')}`;
+  }
+
+  function saveTranslation() {
+    if (!rightPanel || !translationHtml.trim()) return;
+    const md = htmlToMd(translationHtml);
+    upsert(translationFilePath(rightPanel.path, translationLang), (rightPanel.frontmatter || '') + md + '\n');
+  }
+
+  async function gtTranslateBlock(text, tgtLang) {
+    const res = await fetch(
+      `https://translate.googleapis.com/translate_a/single?client=gtx&sl=en&tl=${tgtLang}&dt=t&q=${encodeURIComponent(text)}`
+    );
+    if (!res.ok) throw new Error(`Google Translate API error: ${res.status}`);
+    const data = await res.json();
+    return (data[0] || []).map(item => item[0]).join('');
+  }
+
+  async function handleGoogleTranslate() {
+    if (!rightPanel) return;
+    setTranslating(true);
+    setTranslateError('');
+    try {
+      const div = document.createElement('div');
+      div.innerHTML = rightPanel.htmlContent;
+      const blocks = Array.from(div.querySelectorAll('p, h1, h2, h3, h4, h5, h6, li, td, th'));
+      for (const block of blocks) {
+        const text = block.textContent.trim();
+        if (text.length < 3) continue;
+        block.textContent = await gtTranslateBlock(text, translationLang);
+      }
+      setTranslationHtml(div.innerHTML);
+      setTranslateKey(k => k + 1);
+    } catch (e) {
+      setTranslateError(e.message || 'Google Translate failed');
+    } finally {
+      setTranslating(false);
+    }
+  }
+
+  async function handleAutoTranslate() {
+    if (!translationProxy || !rightPanel) return;
+    setTranslating(true);
+    setTranslateError('');
+    setTranslationHtml('');
+    try {
+      const result = await translateHtmlContent(rightPanel.htmlContent, translationLang, translationProxy);
+      setTranslationHtml(result);
+      setTranslateKey(k => k + 1);
+    } catch (e) {
+      setTranslateError(e.message || 'Translation failed');
+    } finally {
+      setTranslating(false);
+    }
+  }
+
+  /* ── Operations ─────────────────────────────────────────────────────── */
+
+  function findSiblings(targetPath) {
+    function search(nodes) {
+      for (let i = 0; i < nodes.length; i++) {
+        if (nodes[i].path === targetPath) return nodes;
+        if (nodes[i].children?.length) {
+          const r = search(nodes[i].children);
+          if (r) return r;
+        }
+      }
+      return null;
+    }
+    return search(tree) || [];
+  }
+
+  function addSection(rawLabel) {
+    const position = tree.filter(n => n.type === 'section').reduce((m, n) => Math.max(m, isFinite(n.position) ? n.position : 0), 0) + 1;
+    const { slug, label } = makeChapter(rawLabel, position);
+    upsert(`docs/${slug}/_category_.json`, starterCategory(label, position));
+    upsert(`docs/${slug}/intro.md`, starterPage('Introduction', 1));
+    setExpanded(prev => new Set([...prev, `docs/${slug}`]));
+  }
+
+  function addPage(sectionNode, label) {
+    const slug = slugify(label);
+    const position = sectionNode.children.length + 1;
+    const path = `${sectionNode.path}/${slug}.md`;
+    upsert(path, starterPage(label, position));
+    const md = starterPage(label, position);
+    const { frontmatter, content } = splitFrontmatter(md);
+    setRightPanel({ path, htmlContent: mdToHtml(content), frontmatter, fetching: false, dirty: false });
+  }
+
+  async function addSubPage(pageNode, label) {
+    const parentDir = pageNode.path.replace(/\/[^/]+\.md$/, '');
+    const pageSlug = pageNode.slug;
+    const newDirPath = `${parentDir}/${pageSlug}`;
+
+    setNodeLoading(pageNode.path, true);
+    try {
+      const origContent = await getPageContent(pageNode.path);
+      const newSlug = slugify(label);
+
+      upsert(`${newDirPath}/_category_.json`, starterCategory(pageNode.label, pageNode.position != null && isFinite(pageNode.position) ? pageNode.position : 99));
+      upsert(`${newDirPath}/index.md`, origContent);
+      upsert(`${newDirPath}/${newSlug}.md`, starterPage(label, 2));
+      del(pageNode.path);
+      if (rightPanel?.path === pageNode.path) setRightPanel(null);
+      setExpanded(prev => new Set([...prev, newDirPath]));
+    } catch (e) {
+      setError(`Could not load page content: ${e.message}`);
+    } finally {
+      setNodeLoading(pageNode.path, false);
+    }
+  }
+
+  function renameSection(node, newLabel) {
+    const catPath = `${node.path}/_category_.json`;
+    const existing = changes[catPath]?.op === 'upsert' ? JSON.parse(changes[catPath].content) : node.categoryData || {};
+    upsert(catPath, JSON.stringify({ ...existing, label: newLabel }, null, 2));
+  }
+
+  async function renamePage(node, newLabel) {
+    setNodeLoading(node.path, true);
+    try {
+      const content = await getPageContent(node.path);
+      upsert(node.path, setFrontmatterField(content, 'sidebar_label', JSON.stringify(newLabel)));
+    } catch (e) {
+      setError(`Could not load page: ${e.message}`);
+    } finally {
+      setNodeLoading(node.path, false);
+    }
+  }
+
+  function renameNode(node, newLabel) {
+    if (node.type === 'section') renameSection(node, newLabel);
+    else renamePage(node, newLabel);
+  }
+
+  async function moveSectionPosition(node, newPos) {
+    const catPath = `${node.path}/_category_.json`;
+    const existing = changes[catPath]?.op === 'upsert' ? JSON.parse(changes[catPath].content) : node.categoryData || {};
+    upsert(catPath, JSON.stringify({ ...existing, position: newPos }, null, 2));
+  }
+
+  async function movePagePosition(node, newPos) {
+    setNodeLoading(node.path, true);
+    try {
+      const content = await getPageContent(node.path);
+      upsert(node.path, setFrontmatterField(content, 'sidebar_position', newPos));
+    } catch (e) {
+      setError(`Could not reorder page: ${e.message}`);
+    } finally {
+      setNodeLoading(node.path, false);
+    }
+  }
+
+  async function moveNode(node, direction) {
+    const siblings = findSiblings(node.path);
+    const idx = siblings.findIndex(s => s.path === node.path);
+    if (idx < 0) return;
+    const swapIdx = direction === 'up' ? idx - 1 : idx + 1;
+    if (swapIdx < 0 || swapIdx >= siblings.length) return;
+    const sibling = siblings[swapIdx];
+    if (node.type === 'section') moveSectionPosition(node, swapIdx + 1);
+    else await movePagePosition(node, swapIdx + 1);
+    if (sibling.type === 'section') moveSectionPosition(sibling, idx + 1);
+    else await movePagePosition(sibling, idx + 1);
+  }
+
+  function deleteNode(node) {
+    if (!window.confirm(`Delete "${node.label}"? This cannot be undone until the PR is cancelled.`)) return;
+    del(node.path);
+    if (rightPanel?.path === node.path) setRightPanel(null);
+  }
+
+  /* ── Submit ─────────────────────────────────────────────────────────── */
+
+  async function handleSubmit() {
+    if (!auth?.token) { setSubmitError('Connect your GitHub account first.'); return; }
+    const changeList = Object.entries(changes).map(([path, c]) => ({ path, ...c }));
+    if (changeList.length === 0) { setSubmitError('No changes to submit.'); return; }
+
+    setSubmitting(true);
+    setSubmitError('');
+    try {
+      const pr = await createStructurePR({
+        token: auth.token,
+        changes: changeList,
+        prTitle: `Contribute: playbook edits (${changeList.length} file${changeList.length > 1 ? 's' : ''})`,
+        prBody: [
+          `Community-suggested playbook changes by @${auth.username}.`,
+          '',
+          '**Files changed:**',
+          changeList.map(c => `- \`${c.op === 'delete' ? '–' : '+'} ${c.path}\``).join('\n'),
+          '',
+          '_Submitted via the Contribute editor._',
+        ].join('\n'),
+      });
+      setSuccess(pr);
+      // Clear persisted changes after successful PR
+      setChanges({});
+    } catch (e) {
+      setSubmitError(e.message);
+    } finally {
+      setSubmitting(false);
+    }
+  }
+
+  const pendingList = Object.entries(changes).map(([path, c]) => ({ path, ...c }));
+
+  /* ── Render ─────────────────────────────────────────────────────────── */
+
+  return (
+    <div
+      className={styles.overlay}
+      onMouseDown={e => { if (e.target === e.currentTarget) onClose(); }}
+    >
+      <div
+        className={`${styles.modal}${fullscreen ? ` ${styles.modalFullscreen}` : ''}`}
+        role="dialog"
+        aria-modal="true"
+        aria-label="Contribute to the Playbook"
+        style={fullscreen ? undefined : {
+          width: modalSize.width,
+          height: modalSize.height,
+          ...(modalPos ? { position: 'absolute', left: modalPos.x, top: modalPos.y } : {}),
+        }}
+      >
+        {/* Header — drag to reposition */}
+        <div className={styles.modalHeader} onMouseDown={handleHeaderMouseDown}>
+          <div className={styles.headerLeft}>
+            <span className={styles.headerIcon}>✦</span>
+            <h2 className={styles.modalTitle}>Contribute to the Playbook</h2>
+          </div>
+          <button className={styles.closeBtn} onClick={onClose} aria-label="Close">✕</button>
+        </div>
+
+        {/* Body */}
+        <div className={styles.modalBody} style={{ position: 'relative' }}>
+          {success ? (
+            <div className={styles.successBox}>
+              <div className={styles.successIcon}>✓</div>
+              <p className={styles.successText}>Pull request created!</p>
+              <a href={success.url} target="_blank" rel="noreferrer noopener" className={styles.prLink}>
+                View PR #{success.number} on GitHub →
+              </a>
+              <p className={styles.successNote}>A maintainer will review and merge your changes. Thank you!</p>
+              <button className={styles.closeSuccessBtn} onClick={onClose}>Close</button>
+            </div>
+          ) : (
+            <div
+              className={styles.editorLayout}
+              style={{ gridTemplateColumns: leftHidden ? `32px 0px 1fr` : `${leftWidth}px 4px 1fr` }}
+            >
+
+              {/* ── Left panel ── */}
+              <div className={`${styles.leftPanel}${leftHidden ? ` ${styles.leftPanelHidden}` : ''}`}>
+                {leftHidden ? (
+                  <button
+                    className={styles.panelExpandTab}
+                    onClick={() => setLeftHidden(false)}
+                    title="Show structure panel"
+                    type="button"
+                  >
+                    <span>❯</span>
+                    <span className={styles.panelExpandLabel}>Structure</span>
+                  </button>
+                ) : (
+                <div className={styles.treePanelHeader}>
+                  <span className={styles.treePanelTitle}>Playbook pages</span>
+                  <div className={styles.treePanelHeaderActions}>
+                    <button
+                      className={styles.addSectionBtn}
+                      onClick={() => setActiveForm('root:add-section')}
+                      disabled={!auth}
+                      title={!auth ? 'Sign in with GitHub to make changes' : undefined}
+                      type="button"
+                    >
+                      + Section
+                    </button>
+                    <button
+                      className={styles.uploadBtn}
+                      disabled={!auth}
+                      title={!auth ? 'Sign in with GitHub to upload a document' : 'Upload document'}
+                      type="button"
+                      onClick={() => uploadInputRef.current?.click()}
+                    >
+                      📤 Upload document
+                    </button>
+                    <input
+                      ref={uploadInputRef}
+                      type="file"
+                      accept=".md,.mdx,.txt,.html,.htm,.docx,.pdf"
+                      multiple
+                      style={{ display: 'none' }}
+                      onChange={handleUploadFile}
+                    />
+                    <button
+                      className={styles.hideStructureBtn}
+                      onClick={() => {
+                        if (expanded.size === 0) {
+                          // Expand all
+                          const allKeys = new Set();
+                          function collectKeys(nodes) {
+                            for (const node of nodes) {
+                              if (node.type === 'section') {
+                                allKeys.add(node.path);
+                                if (node.children) collectKeys(node.children);
+                              }
+                            }
+                          }
+                          if (tree) collectKeys(tree);
+                          setExpanded(allKeys);
+                        } else {
+                          // Collapse all
+                          setExpanded(new Set());
+                        }
+                      }}
+                      title={expanded.size === 0 ? 'Expand all sections' : 'Collapse all sections'}
+                      type="button"
+                    >
+                      {expanded.size === 0 ? '▼ Expand' : '▲ Collapse'}
+                    </button>
+                    <button
+                      className={styles.hideStructureBtn}
+                      onClick={() => setLeftHidden(true)}
+                      title="Hide structure panel"
+                      type="button"
+                    >
+                      ❮
+                    </button>
+                  </div>
+                </div>
+                )}
+
+                {!leftHidden && loading ? (
+                  <div className={styles.stateBox}>Loading tree from GitHub…</div>
+                ) : error ? (
+                  <div className={styles.errorBox}>
+                    {error}
+                    {error.includes('rate limit') && !auth && (
+                      <p style={{ marginTop: '0.5rem', fontSize: '0.8rem', opacity: 0.85 }}>
+                        Sign in with GitHub below to load the tree using your authenticated quota.
+                      </p>
+                    )}
+                    {error.includes('rate limit') && auth && (
+                      <button
+                        type="button"
+                        style={{ marginTop: '0.5rem', padding: '0.25rem 0.75rem', fontSize: '0.8rem', cursor: 'pointer' }}
+                        onClick={() => loadTree(auth.token)}
+                      >
+                        Retry
+                      </button>
+                    )}
+                  </div>
+                ) : (
+                  <div className={styles.treeScroll}>
+                    {tree.map(node => (
+                      <TreeRow
+                        key={node.path}
+                        node={node}
+                        depth={0}
+                        siblings={tree}
+                        expanded={expanded}
+                        onToggle={path => setExpanded(prev => {
+                          const n = new Set(prev);
+                          n.has(path) ? n.delete(path) : n.add(path);
+                          return n;
+                        })}
+                        activeForm={activeForm}
+                        onSetActiveForm={setActiveForm}
+                        onAddPage={addPage}
+                        onAddSection={addSection}
+                        onAddSubPage={addSubPage}
+                        onRename={renameNode}
+                        onMoveUp={n => moveNode(n, 'up')}
+                        onMoveDown={n => moveNode(n, 'down')}
+                        onDelete={deleteNode}
+                        onEditPage={handleEditPage}
+                        onEditSection={handleEditSection}
+                        editingPath={rightPanel?.path}
+                        loadingPaths={loadingPaths}
+                        locked={!auth}
+                      />
+                    ))}
+
+                    {activeForm === 'root:add-section' && (
+                      <div style={{ paddingLeft: 8, paddingTop: 4 }}>
+                        <InlineForm
+                          placeholder="Section title, e.g. Evaluation Methods"
+                          onConfirm={label => { addSection(label); setActiveForm(null); }}
+                          onCancel={() => setActiveForm(null)}
+                        />
+                      </div>
+                    )}
+                  </div>
+                )}
+
+                {/* Footer: pending + auth + submit — hidden when panel is collapsed */}
+                {!leftHidden && <div className={styles.leftPanelFooter}>
+                  {pendingList.length > 0 && (
+                    <div className={styles.pendingSection}>
+                      <div className={styles.pendingSectionTitle}>
+                        <span>
+                          Pending changes
+                          <span className={styles.changeCount}>{pendingList.length}</span>
+                        </span>
+                        <button
+                          className={styles.clearAllBtn}
+                          onClick={clearAllChanges}
+                          type="button"
+                          title="Discard all changes"
+                        >
+                          Clear all
+                        </button>
+                      </div>
+                      <ul className={styles.changeList}>
+                        {pendingList.map(c => (
+                          <li key={c.path} className={styles.changeItem}>
+                            <span className={`${styles.changeOp} ${c.op === 'delete' ? styles.opDelete : styles.opUpsert}`}>
+                              {c.op === 'delete' ? '–' : '+'}
+                            </span>
+                            <span className={styles.changePath} title={c.path}>
+                              {c.path.replace('docs/', '')}
+                            </span>
+                            <button
+                              className={styles.undoBtn}
+                              onClick={() => undoChange(c.path)}
+                              title="Undo"
+                              type="button"
+                            >
+                              ↩
+                            </button>
+                          </li>
+                        ))}
+                      </ul>
+                    </div>
+                  )}
+
+                  <AuthPanel
+                    auth={auth}
+                    clientId={oauthClientId}
+                    proxyUrl={oauthProxyUrl}
+                    callbackUrl={oauthCallbackUrl}
+                    onConnect={handleConnect}
+                    onDisconnect={handleDisconnect}
+                  />
+
+                  {submitError && (() => {
+                    // Extract fork URL if present
+                    const forkUrlMatch = submitError.match(/https:\/\/github\.com\/[^/]+\/AfriPlaybook/);
+                    const forkUrl = forkUrlMatch ? forkUrlMatch[0] : null;
+                    const isForkError = submitError.includes('don\'t have write access');
+
+                    if (isForkError && forkUrl) {
+                      return (
+                        <div className={styles.submitErrorBox} style={{ display: 'flex', flexDirection: 'column', maxHeight: '70vh' }}>
+                          <div className={styles.submitErrorHeader} style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: '1rem' }}>
+                            <span>⚠️ Fork Required to Contribute</span>
+                            <div style={{ display: 'flex', gap: '0.5rem', alignItems: 'center' }}>
+                              <button
+                                className={clsx('button', styles.primaryButton)}
+                                onClick={handleSubmit}
+                                disabled={submitting}
+                                style={{ padding: '0.35rem 0.8rem', fontSize: '0.8rem', whiteSpace: 'nowrap' }}
+                                type="button"
+                              >
+                                {submitting ? '⏳ Retrying…' : '🔄 Retry'}
+                              </button>
+                              <button
+                                className={styles.closeBtn}
+                                onClick={() => setSubmitError('')}
+                                type="button"
+                              >✕</button>
+                            </div>
+                          </div>
+                          <div className={styles.submitErrorBody} style={{ flex: 1, minHeight: 0, paddingTop: '0.75rem' }}>
+                            <p style={{ marginTop: 0, fontSize: '0.9rem', color: '#666', marginBottom: '1rem' }}>
+                              Follow these 3 steps to contribute:
+                            </p>
+
+                            <div style={{ display: 'flex', flexDirection: 'column', gap: '1rem' }}>
+                              {/* Step 1 */}
+                              <div style={{ display: 'flex', gap: '0.75rem' }}>
+                                <div style={{ fontSize: '1.2rem', fontWeight: 'bold', color: '#2e8555', minWidth: '2rem', flexShrink: 0 }}>1️⃣</div>
+                                <div style={{ flex: 1 }}>
+                                  <div style={{ fontWeight: '600', marginBottom: '0.3rem' }}>Fork the repository</div>
+                                  <button
+                                    style={{
+                                      background: 'none',
+                                      border: 'none',
+                                      color: '#0969da',
+                                      cursor: 'pointer',
+                                      textDecoration: 'underline',
+                                      padding: 0,
+                                      font: 'inherit',
+                                      fontSize: '0.9rem'
+                                    }}
+                                    onClick={() => window.open(`https://github.com/warakacommunity/AfriPlaybook/fork`, '_blank')}
+                                    type="button"
+                                  >
+                                    Click here to fork on GitHub →
+                                  </button>
+                                </div>
+                              </div>
+
+                              {/* Step 2 */}
+                              <div style={{ display: 'flex', gap: '0.75rem' }}>
+                                <div style={{ fontSize: '1.2rem', fontWeight: 'bold', color: '#2e8555', minWidth: '2rem', flexShrink: 0 }}>2️⃣</div>
+                                <div>
+                                  <div style={{ fontWeight: '600' }}>Wait 10-15 seconds</div>
+                                  <div style={{ fontSize: '0.9rem', color: '#666', marginTop: '0.2rem' }}>
+                                    GitHub needs time to create your fork
+                                  </div>
+                                </div>
+                              </div>
+
+                              {/* Step 3 */}
+                              <div style={{ display: 'flex', gap: '0.75rem' }}>
+                                <div style={{ fontSize: '1.2rem', fontWeight: 'bold', color: '#2e8555', minWidth: '2rem', flexShrink: 0 }}>3️⃣</div>
+                                <div style={{ flex: 1 }}>
+                                  <div style={{ fontWeight: '600' }}>Click Retry (top right)</div>
+                                  <div style={{ fontSize: '0.9rem', color: '#666', marginTop: '0.2rem' }}>
+                                    Fork: <code style={{ background: '#f0f0f0', padding: '2px 4px', borderRadius: '3px', fontSize: '0.85rem' }}>{forkUrl.replace('https://github.com/', '')}</code>
+                                  </div>
+                                </div>
+                              </div>
+                            </div>
+                          </div>
+                          <div style={{ borderTop: '1px solid #f5c6cb', padding: '0.75rem 1rem', display: 'flex', gap: '0.5rem', flexShrink: 0, backgroundColor: '#fff0f0', justifyContent: 'flex-end' }}>
+                            <button
+                              className={clsx('button', styles.secondaryButton)}
+                              onClick={() => window.open(forkUrl, '_blank')}
+                              style={{ padding: '0.35rem 0.8rem', fontSize: '0.8rem' }}
+                              type="button"
+                            >
+                              👁️ View fork
+                            </button>
+                          </div>
+                        </div>
+                      );
+                    }
+
+                    // Fallback for other errors
+                    return (
+                      <div className={styles.submitErrorBox}>
+                        <div className={styles.submitErrorHeader}>
+                          <span>⚠️ Cannot Submit PR</span>
+                          <button
+                            className={styles.closeBtn}
+                            onClick={() => setSubmitError('')}
+                            type="button"
+                          >✕</button>
+                        </div>
+                        <div className={styles.submitErrorBody}>
+                          <p style={{ whiteSpace: 'pre-wrap', lineHeight: '1.6' }}>{submitError}</p>
+                          <div style={{ marginTop: '1rem', display: 'flex', gap: '0.5rem' }}>
+                            <button
+                              className={clsx('button', styles.primaryButton)}
+                              onClick={handleSubmit}
+                              disabled={submitting}
+                              style={{ flex: 1 }}
+                              type="button"
+                            >
+                              {submitting ? 'Retrying…' : '🔄 Retry'}
+                            </button>
+                            <button
+                              className={clsx('button', styles.secondaryButton)}
+                              onClick={() => setSubmitError('')}
+                              style={{ flex: 1 }}
+                              type="button"
+                            >
+                              Dismiss
+                            </button>
+                          </div>
+                        </div>
+                      </div>
+                    );
+                  })()}
+
+                  <div className={styles.submitRow}>
+                    <button className={styles.cancelBtn} onClick={onClose} type="button">Close</button>
+                    <button
+                      className={styles.submitBtn}
+                      onClick={handleSubmit}
+                      disabled={submitting || pendingList.length === 0 || !auth}
+                      title={!auth ? 'Connect GitHub first' : pendingList.length === 0 ? 'No changes to submit' : ''}
+                      type="button"
+                    >
+                      {submitting ? 'Creating PR…' : `Submit${pendingList.length > 0 ? ` (${pendingList.length})` : ''} as PR`}
+                    </button>
+                  </div>
+                </div>}
+              </div>
+
+              {/* ── Panel splitter ── */}
+              <div
+                className={styles.splitter}
+                onMouseDown={handleSplitterMouseDown}
+                title="Drag to resize panels"
+              />
+
+              {/* ── Right panel: content editor ── */}
+              <div className={styles.rightPanel}>
+                {rightPanel ? (
+                  rightPanel.fetching ? (
+                    <div className={styles.rightPanelPlaceholder}>
+                      <span className={styles.rightPanelPlaceholderIcon}>⋯</span>
+                      <p>Loading page content…</p>
+                    </div>
+                  ) : (
+                    <>
+                      {/* ── Tab bar ── */}
+                      <div className={styles.rightPanelHeader}>
+                        <div className={styles.rightPanelTabs}>
+                          <button
+                            className={`${styles.rightPanelTab} ${rightPanelTab === 'edit' ? styles.rightPanelTabActive : ''}`}
+                            onClick={() => setRightPanelTab('edit')}
+                            type="button"
+                          >
+                            ✎ Edit
+                          </button>
+                          <button
+                            className={`${styles.rightPanelTab} ${rightPanelTab === 'translate' ? styles.rightPanelTabActive : ''}`}
+                            onClick={() => setRightPanelTab('translate')}
+                            disabled={!auth}
+                            title={!auth ? 'Sign in with GitHub to contribute translations' : undefined}
+                            type="button"
+                          >
+                            🌍 Translation
+                          </button>
+                        </div>
+                        <div className={styles.rightPanelActions}>
+                          {rightPanelTab === 'edit' ? (
+                            <button
+                              className={styles.rightPanelSaveBtn}
+                              type="button"
+                              onClick={saveRightPanel}
+                              disabled={!auth}
+                              title={!auth ? 'Sign in with GitHub to save changes' : undefined}
+                            >
+                              ✓ Save to changes
+                            </button>
+                          ) : (
+                            <button
+                              className={styles.rightPanelSaveBtn}
+                              type="button"
+                              onClick={saveTranslation}
+                              disabled={!auth || !translationHtml.trim()}
+                              title={!auth ? 'Sign in with GitHub to save' : !translationHtml.trim() ? 'Add a translation first' : undefined}
+                            >
+                              ✓ Save translation
+                            </button>
+                          )}
+                          <button
+                            className={styles.rightPanelCloseBtn}
+                            type="button"
+                            onClick={() => setRightPanel(null)}
+                            title="Close editor"
+                          >
+                            ✕
+                          </button>
+                        </div>
+                      </div>
+
+                      {/* ── Edit tab ── */}
+                      {rightPanelTab === 'edit' && (
+                        <div className={styles.rightPanelBody} style={{ position: 'relative' }}>
+                          <WysiwygEditor
+                            key={rightPanel.path}
+                            initialHtml={rightPanel.htmlContent}
+                            onChange={html => setRightPanel(prev => ({ ...prev, htmlContent: html, dirty: true }))}
+                          />
+                          {!auth && (
+                            <div className={styles.editorLockOverlay}>
+                              <span className={styles.editorLockMsg}>
+                                🔒 Sign in with GitHub to edit pages
+                              </span>
+                            </div>
+                          )}
+                        </div>
+                      )}
+
+                      {/* ── Translation tab — side-by-side ── */}
+                      {rightPanelTab === 'translate' && (
+                        <div className={styles.translatePanel}>
+                          {/* Toolbar */}
+                          <div className={styles.translateToolbar}>
+                            <label className={styles.translateLangLabel}>Target language</label>
+                            <select
+                              className={styles.translateLangSelect}
+                              value={translationLang}
+                              onChange={e => { setTranslationLang(e.target.value); setTranslationHtml(''); setTranslateError(''); }}
+                            >
+                              <option value="ha">Hausa</option>
+                              <option value="am">Amharic</option>
+                              <option value="sw">Swahili</option>
+                              <option value="fr">Français</option>
+                              <option value="pt">Português</option>
+                            </select>
+                            {translationProxy && (
+                              <button
+                                className={styles.translateAutoBtn}
+                                type="button"
+                                onClick={handleAutoTranslate}
+                                disabled={translating || !SUPPORTED_AUTO_TRANSLATE.has(translationLang)}
+                                title="Generate a draft translation (Helsinki-NLP for European languages, MyMemory for African languages)"
+                              >
+                                {translating ? '⏳ Translating…' : '✨ Auto-translate'}
+                              </button>
+                            )}
+                            <button
+                              className={styles.translateOpenBtn}
+                              type="button"
+                              onClick={handleGoogleTranslate}
+                              disabled={translating}
+                              title="Translate using Google Translate API"
+                            >
+                              {translating ? '⏳ Translating…' : '🌐 Google Translate'}
+                            </button>
+                          </div>
+                          {translateError && (
+                            <div className={styles.translateError}>
+                              {translateError}
+                            </div>
+                          )}
+
+                          {/* Side-by-side panes */}
+                          <div
+                            className={styles.translateSplitView}
+                            style={{ gridTemplateColumns: translateSplitWidth ? `${translateSplitWidth}px 4px 1fr` : '1fr 4px 1fr' }}
+                          >
+                            {/* Left: original read-only */}
+                            <div className={styles.translateSide}>
+                              <div className={styles.translateSideHeader}>English (original)</div>
+                              <div
+                                className={styles.translateOriginalContent}
+                                dangerouslySetInnerHTML={{ __html: rightPanel.htmlContent }}
+                              />
+                            </div>
+
+                            <div
+                              className={styles.splitter}
+                              onMouseDown={handleTranslateSplitterMouseDown}
+                              title="Drag to resize"
+                            />
+
+                            {/* Right: translation editor */}
+                            <div className={styles.translateSide}>
+                              <div className={styles.translateSideHeader}>
+                                Translation
+                              </div>
+                              <div className={styles.translateEditorBody}>
+                                <WysiwygEditor
+                                  key={`${rightPanel.path}-${translationLang}-${translateKey}`}
+                                  initialHtml={translationHtml}
+                                  onChange={html => setTranslationHtml(html)}
+                                />
+                                {!auth && (
+                                  <div className={styles.editorLockOverlay}>
+                                    <span className={styles.editorLockMsg}>
+                                      🔒 Sign in with GitHub to save translations
+                                    </span>
+                                  </div>
+                                )}
+                              </div>
+                            </div>
+                          </div>
+                        </div>
+                      )}
+                    </>
+                  )
+                ) : (
+                  <div className={styles.rightPanelPlaceholder}>
+                    <span className={styles.rightPanelPlaceholderIcon}>📄</span>
+                    <p>Click <strong>✎</strong> next to any page to edit its content here.</p>
+                    <p className={styles.rightPanelPlaceholderHint}>
+                      Changes are saved locally — close and reopen this dialog anytime without losing your work.
+                    </p>
+                  </div>
+                )}
+              </div>
+
+            </div>
+          )}
+
+        </div>
+
+        {/* Footer bar */}
+        <div className={styles.modalFooterBar}>
+          <button
+            type="button"
+            className={styles.fullscreenBtn}
+            onClick={() => setFullscreen(f => !f)}
+            title={fullscreen ? 'Exit full screen' : 'Full screen'}
+          >
+            {fullscreen ? (
+              <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round">
+                <path d="M8 3v3a2 2 0 0 1-2 2H3"/><path d="M21 8h-3a2 2 0 0 1-2-2V3"/>
+                <path d="M3 16h3a2 2 0 0 1 2 2v3"/><path d="M16 21v-3a2 2 0 0 1 2-2h3"/>
+              </svg>
+            ) : (
+              <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round">
+                <path d="M8 3H5a2 2 0 0 0-2 2v3"/><path d="M21 8V5a2 2 0 0 0-2-2h-3"/>
+                <path d="M3 16v3a2 2 0 0 0 2 2h3"/><path d="M16 21h3a2 2 0 0 0 2-2v-3"/>
+              </svg>
+            )}
+            {fullscreen ? 'Exit full screen' : 'Full screen'}
+          </button>
+        </div>
+
+        {/* Upload preview overlay */}
+        {uploadPreview && (
+          <div className={styles.uploadOverlay}>
+            <div className={styles.uploadPreviewPanel}>
+              <div className={styles.uploadPreviewHeader}>
+                <span className={styles.uploadPreviewFileName}>{uploadPreview.fileName}</span>
+                <button
+                  className={styles.closeBtn}
+                  onClick={() => setUploadPreview(null)}
+                  aria-label="Close preview"
+                  type="button"
+                >✕</button>
+              </div>
+              <div className={styles.uploadPreviewBody}>
+                <div className={styles.uploadTitleRow}>
+                  <label className={styles.uploadTitleLabel}>Page title</label>
+                  <input
+                    className={styles.uploadTitleInput}
+                    value={uploadPreview.title}
+                    onChange={e => {
+                      const newTitle = e.target.value;
+                      setUploadPreview(prev => ({
+                        ...prev,
+                        title: newTitle,
+                        markdown: prev.titleFromH1
+                          ? prev.markdown.replace(/^#\s+.+$/m, `# ${newTitle}`)
+                          : prev.markdown,
+                      }));
+                    }}
+                  />
+                </div>
+                <div
+                  className={styles.uploadPreviewContent}
+                  dangerouslySetInnerHTML={{ __html: mdToHtml(uploadPreview.markdown) }}
+                />
+              </div>
+              <div className={styles.uploadPreviewFooter}>
+                <div className={styles.uploadPlacement}>
+                  <span className={styles.uploadTitleLabel}>Place as</span>
+                  <div className={styles.uploadRadioGroup}>
+                    {[
+                      { value: 'page',       label: 'New page in section' },
+                      { value: 'section',    label: 'New top-level section' },
+                      { value: 'subsection', label: 'Sub-section under section' },
+                    ].map(({ value, label }) => (
+                      <label key={value} className={styles.uploadRadioLabel}>
+                        <input
+                          type="radio"
+                          name="uploadPlacement"
+                          value={value}
+                          checked={uploadPlacement === value}
+                          onChange={() => setUploadPlacement(value)}
+                        />
+                        {label}
+                      </label>
+                    ))}
+                  </div>
+
+                  {(uploadPlacement === 'page' || uploadPlacement === 'subsection') && (
+                    <div className={styles.uploadSectionPicker}>
+                      <label className={styles.uploadTitleLabel}>
+                        {uploadPlacement === 'page' ? 'Section' : 'Parent section'}
+                      </label>
+                      <select
+                        className={styles.uploadSectionSelect}
+                        value={uploadTargetSection}
+                        onChange={e => setUploadTargetSection(e.target.value)}
+                      >
+                        {flatSections(tree).map(n => (
+                          <option key={n.path} value={n.path}>{n.label}</option>
+                        ))}
+                      </select>
+                    </div>
+                  )}
+
+                  {(uploadPlacement === 'section' || uploadPlacement === 'subsection') && (
+                    <div className={styles.uploadSectionPicker}>
+                      <label className={styles.uploadTitleLabel}>Section name</label>
+                      <input
+                        className={styles.uploadTitleInput}
+                        placeholder={uploadPreview?.title}
+                        value={uploadSectionName}
+                        onChange={e => setUploadSectionName(e.target.value)}
+                      />
+                    </div>
+                  )}
+                </div>
+
+                <div className={styles.uploadPreviewActions}>
+                  <button
+                    className={styles.cancelBtn}
+                    onClick={() => setUploadPreview(null)}
+                    type="button"
+                  >Cancel</button>
+                  <button
+                    className={styles.submitBtn}
+                    onClick={handleConfirmUpload}
+                    disabled={
+                      (uploadPlacement === 'page' || uploadPlacement === 'subsection') && !uploadTargetSection
+                    }
+                    type="button"
+                  >Add to Playbook →</button>
+                </div>
+              </div>
+            </div>
+          </div>
+        )}
+
+        {/* Batch upload overlay */}
+        {uploadBatch && (
+          <div className={styles.uploadOverlay}>
+            <div className={styles.uploadPreviewPanel}>
+              <div className={styles.uploadPreviewHeader}>
+                <span className={styles.uploadPreviewFileName}>
+                  Upload {uploadBatch.length} documents
+                </span>
+                <button
+                  className={styles.closeBtn}
+                  onClick={() => setUploadBatch(null)}
+                  aria-label="Close"
+                  type="button"
+                >✕</button>
+              </div>
+              <div className={styles.uploadPreviewBody}>
+                <div className={styles.batchList}>
+                  {uploadBatch.map((item, idx) => (
+                    <div key={idx} className={styles.batchItem}>
+                      <span className={styles.batchItemName}>{item.fileName}</span>
+                      <input
+                        className={styles.uploadTitleInput}
+                        value={item.title}
+                        onChange={e => {
+                          const newTitle = e.target.value;
+                          setUploadBatch(prev => prev.map((it, i) => i !== idx ? it : {
+                            ...it,
+                            title: newTitle,
+                            markdown: it.titleFromH1
+                              ? it.markdown.replace(/^#\s+.+$/m, `# ${newTitle}`)
+                              : it.markdown,
+                          }));
+                        }}
+                      />
+                      <button
+                        className={styles.batchRemoveBtn}
+                        type="button"
+                        title="Remove from batch"
+                        onClick={() => setUploadBatch(prev => prev.filter((_, i) => i !== idx))}
+                      >✕</button>
+                    </div>
+                  ))}
+                </div>
+              </div>
+              <div className={styles.uploadPreviewFooter}>
+                <div className={styles.uploadPlacement}>
+                  <span className={styles.uploadTitleLabel}>Place as</span>
+                  <div className={styles.uploadRadioGroup}>
+                    {[
+                      { value: 'page',       label: 'Pages in existing section' },
+                      { value: 'section',    label: 'New top-level section' },
+                      { value: 'subsection', label: 'Sub-section under section' },
+                    ].map(({ value, label }) => (
+                      <label key={value} className={styles.uploadRadioLabel}>
+                        <input
+                          type="radio"
+                          name="batchPlacement"
+                          value={value}
+                          checked={uploadPlacement === value}
+                          onChange={() => setUploadPlacement(value)}
+                        />
+                        {label}
+                      </label>
+                    ))}
+                  </div>
+                  {(uploadPlacement === 'page' || uploadPlacement === 'subsection') && (
+                    <div className={styles.uploadSectionPicker}>
+                      <label className={styles.uploadTitleLabel}>
+                        {uploadPlacement === 'page' ? 'Section' : 'Parent section'}
+                      </label>
+                      <select
+                        className={styles.uploadSectionSelect}
+                        value={uploadTargetSection}
+                        onChange={e => setUploadTargetSection(e.target.value)}
+                      >
+                        {flatSections(tree).map(n => (
+                          <option key={n.path} value={n.path}>{n.label}</option>
+                        ))}
+                      </select>
+                    </div>
+                  )}
+                  {(uploadPlacement === 'section' || uploadPlacement === 'subsection') && (
+                    <div className={styles.uploadSectionPicker}>
+                      <label className={styles.uploadTitleLabel}>Section name</label>
+                      <input
+                        className={styles.uploadTitleInput}
+                        placeholder={uploadBatch[0]?.title}
+                        value={uploadSectionName}
+                        onChange={e => setUploadSectionName(e.target.value)}
+                      />
+                    </div>
+                  )}
+                </div>
+                <div className={styles.uploadPreviewActions}>
+                  <button
+                    className={styles.cancelBtn}
+                    onClick={() => setUploadBatch(null)}
+                    type="button"
+                  >Cancel</button>
+                  <button
+                    className={styles.submitBtn}
+                    onClick={handleConfirmBatch}
+                    disabled={
+                      uploadBatch.length === 0 ||
+                      ((uploadPlacement === 'page' || uploadPlacement === 'subsection') && !uploadTargetSection)
+                    }
+                    type="button"
+                  >Add {uploadBatch.length} pages →</button>
+                </div>
+              </div>
+            </div>
+          </div>
+        )}
+
+        {/* Resize handles — hidden in fullscreen */}
+        {!fullscreen && <>
+          <div className={styles.resizeN}  onMouseDown={e => handleResizeMouseDown(e, { top: true })} />
+          <div className={styles.resizeS}  onMouseDown={e => handleResizeMouseDown(e, { bottom: true })} />
+          <div className={styles.resizeW}  onMouseDown={e => handleResizeMouseDown(e, { left: true })} />
+          <div className={styles.resizeE}  onMouseDown={e => handleResizeMouseDown(e, { right: true })} />
+          <div className={styles.resizeNW} onMouseDown={e => handleResizeMouseDown(e, { top: true, left: true })} />
+          <div className={styles.resizeNE} onMouseDown={e => handleResizeMouseDown(e, { top: true, right: true })} />
+          <div className={styles.resizeSW} onMouseDown={e => handleResizeMouseDown(e, { bottom: true, left: true })} />
+          <div className={styles.resizeSE} onMouseDown={e => handleResizeMouseDown(e, { bottom: true, right: true })} />
+        </>}
+      </div>
+    </div>
+  );
+}
+
+export default function StructureEditor({ className, label }) {
+  const [open, setOpen] = useState(false);
+
+  if (typeof window === 'undefined') return null;
+
+  return (
+    <>
+      <button
+        type="button"
+        className={className || styles.openBtn}
+        onClick={() => setOpen(true)}
+        title={label || 'Edit playbook structure'}
+        aria-label={label || 'Edit playbook structure'}
+      >
+        <span className={styles.openBtnIcon}>🌳</span>
+        {label && <span>{label}</span>}
+      </button>
+      {open && ReactDOM.createPortal(
+        <StructureEditorContent onClose={() => setOpen(false)} />,
+        document.body,
+      )}
+    </>
+  );
+}

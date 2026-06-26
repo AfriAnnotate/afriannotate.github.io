@@ -1,0 +1,26 @@
+{
+  "title": {
+    "message": "MasakhaneHub",
+    "description": "The title in the navbar"
+  },
+  "logo.alt": {
+    "message": "የማሳካኔ ሎጎ",
+    "description": "The alt text of navbar logo"
+  },
+  "item.label.AfriPlaybook": {
+    "message": "AfriPlaybook",
+    "description": "Navbar item with label Playbook"
+  },
+  "item.label.MasakhaneTool": {
+    "message": "MasakhaneTool",
+    "description": "Navbar item with label Annotation Tool"
+  },
+  "item.label.Blog": {
+    "message": "ብሎግ",
+    "description": "Navbar item with label Blog"
+  },
+  "item.label.Download PDF": {
+    "message": "PDF አውርድ",
+    "description": "Navbar item with label Download PDF"
+  }
+}

@@ -1,0 +1,292 @@
+/* Shared styles for Playbook, Tool, and About navbar items.
+   Visual design mirrors ContributeButtonNavbarItem intentionally. */
+
+/* ── Shared button base ───────────────────────────────────── */
+.playbookBtn,
+.toolBtn,
+.aboutBtn {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.4em;
+  padding: 0.45rem 1rem;
+  border: none;
+  border-radius: 6px;
+  background: none;
+  color: var(--ifm-navbar-link-color);
+  font-size: 0.875rem;
+  font-weight: 600;
+  font-family: inherit;
+  cursor: pointer;
+  transition: background 0.15s, color 0.15s;
+  white-space: nowrap;
+  line-height: 1.4;
+  touch-action: manipulation;
+  text-decoration: none;
+}
+
+.playbookBtn:hover,
+.toolBtn:hover,
+.aboutBtn:hover {
+  background: #5b3df5;
+  color: #fff;
+  text-decoration: none;
+}
+
+.playbookBtn:active,
+.toolBtn:active,
+.aboutBtn:active {
+  background: #4422db;
+  color: #fff;
+}
+
+[data-theme='dark'] .playbookBtn:hover,
+[data-theme='dark'] .toolBtn:hover,
+[data-theme='dark'] .aboutBtn:hover {
+  background: #5b3df5;
+  color: #fff;
+}
+
+
+/* ── Shared wrapper + dropdown ────────────────────────────── */
+.wrapper {
+  position: relative;
+  display: inline-flex;
+  align-items: center;
+}
+
+.chevron {
+  font-size: 0.6em;
+  margin-left: 0.15em;
+  opacity: 0.8;
+}
+
+.dropdown {
+  position: absolute;
+  top: calc(100% + 8px);
+  left: 0;
+  min-width: 180px;
+  background: var(--ifm-background-color);
+  border: 1px solid var(--ifm-color-emphasis-200);
+  border-radius: 10px;
+  box-shadow: 0 8px 24px rgba(0, 0, 0, 0.12);
+  overflow: hidden;
+  z-index: 1000;
+  animation: dropIn 0.12s ease;
+}
+
+@keyframes dropIn {
+  from { opacity: 0; transform: translateY(-4px); }
+  to   { opacity: 1; transform: translateY(0); }
+}
+
+[data-theme='dark'] .dropdown {
+  box-shadow: 0 8px 24px rgba(0, 0, 0, 0.4);
+  border-color: var(--ifm-color-emphasis-300);
+}
+
+.dropdownItem {
+  display: flex;
+  align-items: center;
+  gap: 0.5em;
+  width: 100%;
+  padding: 0.65rem 1rem;
+  background: none;
+  border: none;
+  border-bottom: 1px solid var(--ifm-color-emphasis-100);
+  font-size: 0.9rem;
+  font-weight: 600;
+  font-family: inherit;
+  color: var(--ifm-color-emphasis-900);
+  text-decoration: none;
+  cursor: pointer;
+  transition: background 0.1s;
+  text-align: left;
+}
+
+.dropdownItem:last-child {
+  border-bottom: none;
+}
+
+/* ── Megamenu (multi-section dropdown) ───────────────────── */
+.megaMenu {
+  display: flex;
+  flex-direction: row;
+  width: 520px;
+  max-width: calc(100vw - 32px);
+  padding: 0.5rem;
+  gap: 0.3rem;
+  background: #fff;
+  z-index: 2000;
+}
+
+@media (max-width: 800px) {
+  .megaMenu {
+    width: 300px;
+    flex-direction: column;
+  }
+}
+
+[data-theme='dark'] .megaMenu {
+  background: var(--ifm-navbar-background-color, #1b1b1d);
+}
+
+.megaSection {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  min-width: 150px;
+}
+
+.megaSectionTitle {
+  font-size: 0.65rem;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+  color: var(--ifm-color-emphasis-600);
+  padding: 0.4rem 0.6rem 0.3rem;
+}
+
+.megaMenu .dropdownItem {
+  border-bottom: none;
+  border-radius: 6px;
+  padding: 0.45rem 0.6rem;
+  font-size: 0.82rem;
+}
+
+.megaDivider {
+  width: 1px;
+  background: var(--ifm-color-emphasis-200);
+  margin: 0.25rem 0.1rem;
+}
+
+@media (max-width: 600px) {
+  .megaMenu {
+    flex-direction: column;
+    min-width: 240px;
+  }
+  .megaDivider {
+    width: auto;
+    height: 1px;
+    margin: 0.25rem 0.75rem;
+  }
+}
+
+/* ── About megamenu (rich items: icon + title + description) ── */
+.aboutMega {
+  width: 480px;
+  max-width: calc(100vw - 32px);
+  padding: 0.5rem;
+  background: #fff;
+  z-index: 2000;
+  left: auto;
+  right: 0;
+}
+
+[data-theme='dark'] .aboutMega {
+  background: var(--ifm-navbar-background-color, #1b1b1d);
+}
+
+.aboutMegaGrid {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 0.1rem;
+}
+
+.aboutMegaItem {
+  display: flex;
+  align-items: flex-start;
+  gap: 0.55rem;
+  padding: 0.5rem 0.55rem;
+  border-radius: 6px;
+  text-decoration: none;
+  color: var(--ifm-color-emphasis-900);
+  transition: background 0.12s ease;
+}
+
+.aboutMegaItem:hover {
+  background: rgba(var(--brand-rgb), 0.07);
+  text-decoration: none;
+}
+
+.aboutMegaItemIcon {
+  flex-shrink: 0;
+  width: 26px;
+  height: 26px;
+  border-radius: 6px;
+  background: rgba(var(--brand-rgb), 0.1);
+  color: var(--ifm-color-primary);
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  margin-top: 1px;
+}
+
+.aboutMegaItemIcon svg {
+  width: 15px;
+  height: 15px;
+}
+
+.aboutMegaItemText {
+  display: flex;
+  flex-direction: column;
+  min-width: 0;
+}
+
+.aboutMegaItemTitle {
+  font-size: 0.82rem;
+  font-weight: 700;
+  color: var(--ifm-color-emphasis-900);
+  margin-bottom: 0.1rem;
+  line-height: 1.25;
+}
+
+.aboutMegaItemDesc {
+  font-size: 0.72rem;
+  color: var(--ifm-color-emphasis-700);
+  line-height: 1.35;
+}
+
+[data-theme='dark'] .aboutMegaItem:hover {
+  background: rgba(255, 255, 255, 0.05);
+}
+
+@media (max-width: 800px) {
+  .aboutMega {
+    width: 280px;
+  }
+  .aboutMegaGrid {
+    grid-template-columns: 1fr;
+  }
+}
+
+.dropdownItem:hover {
+  background: rgba(var(--brand-rgb), 0.07);
+  color: var(--ifm-color-primary);
+  text-decoration: none;
+}
+
+[data-theme='dark'] .dropdownItem {
+  color: var(--ifm-color-emphasis-800);
+  border-bottom-color: var(--ifm-color-emphasis-200);
+}
+
+/* Hide label on narrow screens, icon only */
+.btnLabel {
+  display: inline;
+}
+
+@media (max-width: 996px) {
+  .btnLabel {
+    display: none;
+  }
+
+  .playbookBtn,
+  .toolBtn,
+  .aboutBtn {
+    padding: 0.45rem 0.65rem;
+  }
+
+  .chevron {
+    display: none;
+  }
+}
