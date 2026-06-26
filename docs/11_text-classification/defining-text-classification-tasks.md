@@ -1,6 +1,6 @@
 ---
 sidebar_position: 1
-sidebar_label: "Defining text classification tasks"
+sidebar_label: "Overview"
 ---
 
 # Defining text classification tasks:

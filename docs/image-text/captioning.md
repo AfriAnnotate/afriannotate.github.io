@@ -1,47 +1,16 @@
 ---
 title: Image captioning
+sidebar_position: 3
 ---
 
 # Image captioning
 
-:::note[Working draft — structure only]
-Chapter skeleton; sections will be filled with verified, cited content later. One-sentence sub-sections get merged at content time.
-:::
+Image captioning describes an image in fluent text. It is the multimodal cousin of text generation, and it inherits both that task's difficulty in low-resource languages and the vision task's dependence on relevant images. For African languages a good caption is not just grammatical, it is culturally apt, naming what is in the picture the way a local speaker would.
 
-## 1. Image captioning
-### 1.1 What is image captioning?
-### 1.2 Task variants
-### 1.3 Challenges for African languages & contexts
+## What the data looks like
 
-## 2. Data collection
-### 2.1 Identifying data sources
-### 2.2 Task-specific sourcing
-### 2.3 Domain considerations
+A captioning dataset pairs images with one or more reference captions in the target language. The crucial choice is how the captions are produced. Translating English captions is quick but yields stilted, culturally displaced descriptions, while writing captions natively from the image gives text that reflects how speakers actually describe their world. AfriCaption took the second route, establishing a paradigm for image captioning across linguistically diverse African languages including Igbo, Hausa, Yoruba, Ewe, Luganda, and Kinyarwanda rather than translating from English ([AfriCaption, 2025](../references.md#africaption-2025)). As with all African vision work, captions of images that show African scenes and objects matter more than captions of borrowed Western photos.
 
-## 3. Data formatting, cleaning & normalization
-### 3.1 Cleaning
-### 3.2 Normalization
-### 3.3 Filtering
+## Annotation and evaluation
 
-## 4. Annotation
-### 4.1 Annotator instructions
-### 4.2 Annotation tools
-### 4.3 Annotator selection
-### 4.4 Metadata management
-### 4.5 Dataset formatting & splitting
-
-## 5. Quality assurance
-### 5.1 Quality checks
-### 5.2 Human review
-### 5.3 Inter-annotator agreement
-
-## 6. Evaluation metrics
-### 6.1 BLEU
-### 6.2 CIDEr
-### 6.3 SPICE
-### 6.4 Human evaluation
-
-## 7. Licensing & ethical considerations
-### 7.1 Publishing datasets
-### 7.2 Publishing platforms
-### 7.3 Ethical considerations
+Captioning annotation is writing descriptions, and the guidelines must fix the level of detail, the handling of uncertain content, and how many captions each image gets, since a single caption underrepresents the many valid ways to describe a picture. Native speakers should write, not translate. Captioning is evaluated with overlap metrics such as BLEU and CIDEr and the semantic metric SPICE, all of which share BLEU's weakness on morphologically rich languages and its blindness to a caption that is fluent but wrong, so native-speaker human evaluation remains the dependable measure, exactly as in [text generation](../text-generation/index.md).

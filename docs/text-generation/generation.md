@@ -1,45 +1,20 @@
 ---
 title: Open-ended generation
+sidebar_position: 2
 ---
 
 # Open-ended generation
 
-:::note[Working draft — structure only]
-Chapter skeleton; sections will be filled with verified, cited content later. One-sentence sub-sections get merged at content time.
-:::
+Open-ended generation is the task of producing fluent, coherent, useful text from a prompt, anything from completing a sentence to writing a paragraph or holding a conversation. It is the foundation of the large language models now reshaping how people write and search, and it is the hardest generation task to do well in a low-resource language, because the model has to learn the grammar, vocabulary, and idiom of the language from data that barely exists.
 
-## 1. Open-ended generation
-### 1.1 What is text generation?
-### 1.2 Task variants
-### 1.3 Challenges for low-resource languages
+## What the data looks like
 
-## 2. Data collection
-### 2.1 Identifying data sources
-### 2.2 Task-specific sourcing
-### 2.3 Domain considerations
+Open-ended generation learns mostly from monolingual text, and the more clean text the better. For African languages the supply is thin and noisy, which is why community corpora built for the purpose matter: large pretraining datasets such as WURA and the SERENGETI collection assembled hundreds of millions of tokens across many African languages precisely because the web did not provide them. The quality bar is high, because a generation model faithfully reproduces the errors in its training data, and the web-crawl audit that found large fractions of low-resource text to be mislabelled or machine-translated is a direct warning for anyone assembling generation data ([Kreutzer et al., 2022](../references.md#kreutzer-2022)). Beyond raw text, steering a model toward useful behaviour needs instruction data, which is prompts paired with good responses, and for African languages that almost always has to be written by people rather than scraped.
 
-## 3. Data formatting, cleaning & normalization
-### 3.1 Cleaning
-### 3.2 Normalization
-### 3.3 Filtering
+## Distinctive challenges
 
-## 4. Annotation
-### 4.1 Annotator instructions
-### 4.2 Annotation tools
-### 4.3 Annotator selection
-### 4.4 Metadata management
-### 4.5 Dataset formatting & splitting
+Three problems recur. Fluency is hard to reach when training data is small, and an undertrained model slips into the dominant colonial language or produces grammatical-looking nonsense. Factuality is fragile, because a model with thin knowledge of a language will invent confidently. And cultural grounding is easily missed, since a model trained mostly on translated or foreign text generates content that is linguistically African but culturally displaced. Native-speaker review is the only reliable check on all three.
 
-## 5. Quality assurance
-### 5.1 Quality checks
-### 5.2 Human review
-### 5.3 Inter-annotator agreement
+## Evaluation
 
-## 6. Evaluation metrics
-### 6.1 Perplexity
-### 6.2 Human evaluation
-
-## 7. Licensing & ethical considerations
-### 7.1 Publishing datasets
-### 7.2 Publishing platforms
-### 7.3 Ethical considerations
+Automatic metrics for open-ended generation are weak, and doubly so for African languages. Perplexity measures how well a model predicts held-out text, but it says nothing about whether the output is useful, true, or natural, and it is not comparable across languages or tokenizers. There is no substitute for human evaluation by native speakers, judging fluency, adequacy, factuality, and cultural appropriateness on real prompts. Treat any automatic number as a rough internal signal, not a result to report on its own.

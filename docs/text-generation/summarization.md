@@ -1,47 +1,20 @@
 ---
 title: Summarization
+sidebar_position: 3
 ---
 
 # Summarization
 
-:::note[Working draft — structure only]
-Chapter skeleton; sections will be filled with verified, cited content later. One-sentence sub-sections get merged at content time.
-:::
+Summarization condenses a longer text into a shorter one that preserves its meaning. It comes in two forms. Extractive summarization selects the most important sentences from the source, while abstractive summarization rewrites the content in new words, which is harder and more useful but also more prone to error. For African languages summarization is valuable because it makes long documents in health, news, and government accessible quickly, and it is difficult for the same reason all generation is: scarce training data and morphologically rich languages that defeat simple methods.
 
-## 1. Summarization
-### 1.1 What is summarization?
-### 1.2 Extractive vs. abstractive
-### 1.3 Challenges for low-resource languages
+## What the data looks like
 
-## 2. Data collection
-### 2.1 Identifying data sources
-### 2.2 Task-specific sourcing
-### 2.3 Domain considerations
+Summarization needs documents paired with reference summaries. The most widely used multilingual resource is XL-Sum, built from BBC articles and their professionally written summaries, which covers a number of African languages including Amharic, Hausa, Igbo, Kirundi, Oromo, Nigerian Pidgin, Somali, Swahili, Tigrinya, and Yorùbá ([Hasan et al., 2021](../references.md#xlsum-2021)). Beyond it, summarization data for African languages is sparse, so most projects create their own by pairing source documents with summaries written by native speakers. The same care applies as in machine translation: prefer document-level material from a domain that matters, and watch for source documents that are themselves machine-translated.
 
-## 3. Data formatting, cleaning & normalization
-### 3.1 Cleaning
-### 3.2 Normalization
-### 3.3 Filtering
+## Distinctive challenges
 
-## 4. Annotation
-### 4.1 Annotator instructions
-### 4.2 Annotation tools
-### 4.3 Annotator selection
-### 4.4 Metadata management
-### 4.5 Dataset formatting & splitting
+The central risk in summarization is faithfulness. An abstractive summary that reads well but states something the source did not is worse than no summary at all, and that risk is higher in low-resource languages where the model's grip on meaning is weaker. Extractive methods avoid invention but can be clumsy in morphologically rich languages where sentence boundaries and salience are harder to detect. Whichever form you target, a human check for whether the summary is faithful to the source is essential.
 
-## 5. Quality assurance
-### 5.1 Quality checks
-### 5.2 Human review
-### 5.3 Inter-annotator agreement
+## Evaluation
 
-## 6. Evaluation metrics
-### 6.1 ROUGE
-### 6.2 BERTScore
-### 6.3 Faithfulness / factuality
-### 6.4 Human evaluation
-
-## 7. Licensing & ethical considerations
-### 7.1 Publishing datasets
-### 7.2 Publishing platforms
-### 7.3 Ethical considerations
+The standard automatic metric, ROUGE, measures the overlap of words and short sequences between the generated summary and a reference. It is convenient but unreliable for African languages, because morphological richness means a correct summary can use different surface forms and still be marked wrong, the same weakness that affects BLEU in translation. Embedding-based metrics such as BERTScore capture meaning better, and a dedicated faithfulness or factuality check, whether automatic or human, catches the inventions that overlap metrics miss. As everywhere in generation, native-speaker human evaluation remains the ground truth.

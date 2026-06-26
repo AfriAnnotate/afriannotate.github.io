@@ -1,45 +1,16 @@
 ---
 title: Segmentation
+sidebar_position: 4
 ---
 
 # Segmentation
 
-:::note[Working draft — structure only]
-Chapter skeleton; sections will be filled with verified, cited content later. One-sentence sub-sections get merged at content time.
-:::
+Segmentation is the most detailed image task: instead of a box, it labels every pixel, outlining the exact shape of objects or regions. It matters in African work wherever a precise area or boundary is the point, such as measuring the exact extent of a crop field, delineating a lesion in a medical scan, or mapping land cover from satellite imagery.
 
-## 1. Segmentation
-### 1.1 What is segmentation?
-### 1.2 Semantic vs. instance
-### 1.3 Challenges for African contexts
+## What the data looks like
 
-## 2. Data collection
-### 2.1 Identifying data sources
-### 2.2 Task-specific sourcing
-### 2.3 Domain considerations
+A segmentation dataset pairs images with pixel-level masks. Semantic segmentation labels every pixel by class without separating individual objects, while instance segmentation also tells apart one object from another of the same class. The data is dominated by the same high-value African domains, with crop-field boundary sets like LacunaLabels and land-cover sets like LandCoverNet built because precise African-landscape masks did not exist. Satellite segmentation carries its own difficulty, cloud cover, which leaves gaps that are often filled by combining optical with radar imagery.
 
-## 3. Data formatting, cleaning & normalization
-### 3.1 Cleaning
-### 3.2 Normalization
-### 3.3 Filtering
+## Annotation and evaluation
 
-## 4. Annotation
-### 4.1 Annotator instructions
-### 4.2 Annotation tools
-### 4.3 Annotator selection
-### 4.4 Metadata management
-### 4.5 Dataset formatting & splitting
-
-## 5. Quality assurance
-### 5.1 Quality checks
-### 5.2 Human review
-### 5.3 Inter-annotator agreement
-
-## 6. Evaluation metrics
-### 6.1 Mean IoU
-### 6.2 Dice / pixel accuracy
-
-## 7. Licensing & ethical considerations
-### 7.1 Publishing datasets
-### 7.2 Publishing platforms
-### 7.3 Ethical considerations
+Pixel-level annotation is the most expensive labelling in this playbook, so design it to be feasible: use tools with smart boundary assistance, define exactly how to treat ambiguous edges and mixed pixels, and pilot to measure how long a mask really takes before committing a budget. Because masks are so detailed, agreement is best measured by overlap rather than exact match. Segmentation is evaluated with mean Intersection over Union (mIoU), and with the Dice coefficient or pixel accuracy, all of which compare predicted masks to reference masks by how much they overlap rather than demanding identical pixels.

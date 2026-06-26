@@ -1,45 +1,16 @@
 ---
 title: Gesture
+sidebar_position: 3
 ---
 
 # Gesture
 
-:::note[Working draft — structure only]
-Chapter skeleton; sections will be filled with verified, cited content later. One-sentence sub-sections get merged at content time.
-:::
+Gesture recognition reads the hand and body movements that accompany or replace speech. It overlaps with sign language but is broader and looser: a gesture is usually a single meaningful movement, such as a wave, a count on the fingers, or a culturally specific sign, rather than a full grammatical language.
 
-## 1. Gesture
-### 1.1 What is gesture data?
-### 1.2 Recognition & generation
-### 1.3 Challenges & cultural variation
+## What the data looks like
 
-## 2. Data collection
-### 2.1 Identifying data sources
-### 2.2 Task-specific sourcing
-### 2.3 Domain considerations
+Gesture data is video or sensor recordings of gestures, labelled with what each one means. The labels can come from cameras or from wearable sensors that capture motion directly. The African-specific point is that gesture is cultural: the same movement can mean different things in different places, and many meaningful gestures in African communities have no equivalent in datasets built elsewhere. A gesture vocabulary has to be defined with the community whose gestures they are, rather than assumed from a foreign taxonomy, or the dataset will encode the wrong meanings.
 
-## 3. Data formatting, cleaning & normalization
-### 3.1 Cleaning
-### 3.2 Normalization
-### 3.3 Filtering
+## Annotation and evaluation
 
-## 4. Annotation
-### 4.1 Annotator instructions
-### 4.2 Annotation tools
-### 4.3 Annotator selection
-### 4.4 Metadata management
-### 4.5 Dataset formatting & splitting
-
-## 5. Quality assurance
-### 5.1 Quality checks
-### 5.2 Human review
-### 5.3 Inter-annotator agreement
-
-## 6. Evaluation metrics
-### 6.1 Accuracy
-### 6.2 F1
-
-## 7. Licensing & ethical considerations
-### 7.1 Publishing datasets
-### 7.2 Publishing platforms
-### 7.3 Ethical considerations
+Annotating gesture is marking which gesture occurs and, in continuous video, when it starts and stops, which makes it a temporal labelling task with the same boundary-ambiguity issues as audio events. Define the gesture set and its cultural meanings clearly, recruit annotators from the relevant community, and measure agreement on shared clips. Gesture recognition is evaluated with accuracy and F1, with per-class reporting where the gesture set is imbalanced, and a human check for the culturally loaded categories that automatic scores cannot judge.

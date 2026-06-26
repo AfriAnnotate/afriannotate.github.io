@@ -58,7 +58,20 @@ const sidebars = {
     },
 
     section('Text', 'sections/text', [
-      chapter('Text Classification', '11_text-classification'),
+      chapterIndexed('Text Classification', 'text-classification/defining-text-classification-tasks', [
+        'text-classification/collecting-and-preparing-data',
+        'text-classification/annotation',
+        {
+          type: 'category',
+          label: 'Example tasks',
+          collapsed: true,
+          items: [
+            'text-classification/sentiment-analysis',
+            'text-classification/emotion-analysis',
+            'text-classification/hate-speech-analysis',
+          ],
+        },
+      ]),
       chapterIndexed('Text Generation', 'text-generation/index', [
         'text-generation/generation',
         'text-generation/summarization',

@@ -4,43 +4,12 @@ title: Speaker Diarization
 
 # Speaker Diarization
 
-:::note[Working draft — structure only]
-Chapter skeleton; sections will be filled with verified, cited content later. Sub-sections that would be a single sentence get merged at content time.
-:::
+Speaker diarization answers "who spoke when", segmenting an audio recording by speaker. It is the task that makes multi-speaker audio usable, turning a recording of a conversation, meeting, radio panel, or interview into labelled turns that can be transcribed and analysed per speaker. For African languages it is both useful and under-resourced, and the conditions of real African audio make it harder than the benchmarks suggest.
 
-## 1. Speaker diarization
-### 1.1 What is speaker diarization?
-### 1.2 "Who spoke when" & overlapping speech
-### 1.3 Challenges for low-resource & multilingual audio
+## What the data looks like
 
-## 2. Data collection
-### 2.1 Identifying data sources
-### 2.2 Task-specific sourcing
-### 2.3 Domain considerations
+Diarization data is multi-speaker audio annotated with speaker-turn boundaries, marking where each speaker starts and stops and which segments belong to the same person. The natural sources are exactly the kinds of recordings African projects already gather: radio broadcasts, community meetings, focus groups, and interviews. Three conditions make African diarization data distinctive and demanding. Overlapping speech is common in natural conversation and is the hardest case for any diarization system. Code-switching means a single speaker may move between languages mid-conversation, which can confuse models that lean on language cues. And recording conditions are variable, since much community audio is captured on phones in noisy settings rather than in studios. Building robust diarization data means embracing these conditions rather than filtering them out.
 
-## 3. Data formatting, cleaning & normalization
-### 3.1 Segmentation & cleaning
-### 3.2 Normalization
-### 3.3 Filtering
+## Annotation and evaluation
 
-## 4. Annotation
-### 4.1 Annotator instructions
-### 4.2 Annotation tools
-### 4.3 Annotator selection
-### 4.4 Metadata management
-### 4.5 Dataset formatting & splitting
-
-## 5. Quality assurance
-### 5.1 Quality checks
-### 5.2 Human review
-### 5.3 Inter-annotator agreement
-
-## 6. Evaluation metrics
-### 6.1 Diarization Error Rate (DER)
-### 6.2 Jaccard Error Rate (JER)
-### 6.3 Human evaluation
-
-## 7. Licensing & ethical considerations
-### 7.1 Publishing datasets
-### 7.2 Publishing platforms
-### 7.3 Ethical considerations
+Annotating diarization is a careful listening-and-marking task: the annotator marks each speaker change in time and assigns a consistent label to each distinct voice across the whole recording. The hard parts are overlapping speech, where two labels apply at once, and deciding whether a brief sound is a new speaker or just noise, so the guidelines must cover both. Standard audio-annotation tools support the timeline segmentation this needs. Diarization is evaluated with the Diarization Error Rate (DER), which combines missed speech, false speech, and speaker-confusion errors into one figure, and the Jaccard Error Rate (JER), which weights every speaker equally regardless of how much they talk. As elsewhere, a human review of a sample catches systematic problems that a single aggregate number cannot.

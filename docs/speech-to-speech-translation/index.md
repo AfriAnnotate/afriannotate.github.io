@@ -4,43 +4,16 @@ title: Speech-to-Speech Translation
 
 # Speech-to-Speech Translation
 
-:::note[Working draft — structure only]
-Chapter skeleton; sections will be filled with verified, cited content later. Sub-sections that would be a single sentence get merged at content time.
-:::
+Speech-to-speech translation (S2ST) takes speech in one language and produces speech in another, the spoken equivalent of a human interpreter. For African languages it is the most ambitious speech task and the least resourced, because it sits on top of three hard tasks at once. This page is short by necessity: dedicated African S2ST data barely exists yet, so the practical advice is about how to assemble it from the pieces you do have.
 
-## 1. Speech-to-speech translation
-### 1.1 What is speech-to-speech translation?
-### 1.2 Cascaded vs. direct systems
-### 1.3 Challenges for low-resource languages
+## Cascaded and direct, and what each needs
 
-## 2. Data collection
-### 2.1 Identifying data sources
-### 2.2 Task-specific sourcing
-### 2.3 Domain considerations
+There are two ways to build S2ST. A cascaded system chains three components, ASR to transcribe the source speech, machine translation to translate the text, and TTS to speak the result, while a direct system learns to map source speech to target speech in one step. For African languages the cascaded route is almost always the realistic one today, because it can reuse the ASR, MT, and TTS datasets covered elsewhere in this section rather than requiring scarce end-to-end speech-translation pairs. The cost of cascading is that errors compound: a mistake in transcription becomes a mistranslation becomes a wrong word spoken aloud. Direct systems avoid that but need paired source-and-target speech that, for most African language pairs, no one has collected.
 
-## 3. Data formatting, cleaning & normalization
-### 3.1 Segmentation & cleaning
-### 3.2 Normalization
-### 3.3 Filtering
+## Building the data
 
-## 4. Annotation
-### 4.1 Annotator instructions
-### 4.2 Annotation tools
-### 4.3 Annotator selection
-### 4.4 Metadata management
-### 4.5 Dataset formatting & splitting
+If you collect S2ST data directly, the unit is aligned speech across two languages, the same utterance spoken in the source and in the target, with a transcript on each side for training and evaluation. This is expensive, so most projects start cascaded and compose existing resources: an ASR corpus for the source language, a parallel text corpus for the pair (see [Machine Translation](../machine-translation/index.md)), and a TTS corpus for the target. Where you do collect end-to-end data, treat consent and voice rights as you would for TTS, since the target side is synthesised or re-spoken speech.
 
-## 5. Quality assurance
-### 5.1 Quality checks
-### 5.2 Human review
-### 5.3 Inter-annotator agreement
+## Evaluation
 
-## 6. Evaluation metrics
-### 6.1 ASR-BLEU / translation quality
-### 6.2 Speech-based metrics (e.g. BLASER)
-### 6.3 Human evaluation
-
-## 7. Licensing & ethical considerations
-### 7.1 Publishing datasets
-### 7.2 Publishing platforms
-### 7.3 Ethical considerations
+S2ST is usually evaluated by transcribing the spoken output and scoring that text against a reference translation, an approach often called ASR-BLEU, with chrF preferred over BLEU for the same morphology reasons as in text translation. Newer speech-aware metrics such as BLASER score the translation directly from the audio. None of these captures whether the output sounds natural and says the right thing, so human evaluation by people fluent in both languages remains essential.

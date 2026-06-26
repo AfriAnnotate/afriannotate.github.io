@@ -1,46 +1,20 @@
 ---
 title: Question answering
+sidebar_position: 4
 ---
 
 # Question answering
 
-:::note[Working draft — structure only]
-Chapter skeleton; sections will be filled with verified, cited content later. One-sentence sub-sections get merged at content time.
-:::
+Question answering returns a correct answer to a question. It takes three main forms. Extractive QA pulls the answer as a span from a given passage, open-retrieval QA first finds the relevant passage and then extracts or generates the answer, and generative QA produces an answer from the model's own knowledge. QA is one of the most useful tasks for African languages, because it turns a pile of documents into something a person can actually ask, and it is also one where current models struggle most.
 
-## 1. Question answering
-### 1.1 What is question answering?
-### 1.2 Extractive, open & generative QA
-### 1.3 Challenges for low-resource languages
+## What the data looks like
 
-## 2. Data collection
-### 2.1 Identifying data sources
-### 2.2 Task-specific sourcing
-### 2.3 Domain considerations
+The landmark resource is AfriQA, the first cross-lingual open-retrieval QA dataset focused on African languages, with more than 12,000 questions across ten languages, where the question is asked in the African language and the answer is retrieved from passages that are often in English or French ([Ogundepo et al., 2023](../references.md#afriqa-2023)). That cross-lingual design is itself a response to scarcity, since there is far more reference text in English than in most African languages. Knowledge-style QA is covered by AfriMMLU within the IrokoBench benchmark, which tests multiple-choice knowledge questions across seventeen languages ([Adelani et al., 2024](../references.md#irokobench-2024)). Building new QA data means writing questions and marking correct answers, work that has to be done by people fluent in the language and, for specialised domains, in the subject.
 
-## 3. Data formatting, cleaning & normalization
-### 3.1 Cleaning
-### 3.2 Normalization
-### 3.3 Filtering
+## Distinctive challenges
 
-## 4. Annotation
-### 4.1 Annotator instructions
-### 4.2 Annotation tools
-### 4.3 Annotator selection
-### 4.4 Metadata management
-### 4.5 Dataset formatting & splitting
+QA exposes the knowledge gap directly. A model that has read little in a language has little to answer from, and cross-lingual retrieval, while a clever workaround, can lose or distort meaning as it crosses languages. Answer boundaries are also harder to mark consistently in morphologically rich languages, where the same answer appears in different inflected forms. Clear annotation guidelines on what counts as a correct answer span are essential.
 
-## 5. Quality assurance
-### 5.1 Quality checks
-### 5.2 Human review
-### 5.3 Inter-annotator agreement
+## Evaluation
 
-## 6. Evaluation metrics
-### 6.1 Exact Match
-### 6.2 F1
-### 6.3 Human evaluation
-
-## 7. Licensing & ethical considerations
-### 7.1 Publishing datasets
-### 7.2 Publishing platforms
-### 7.3 Ethical considerations
+Extractive QA is scored with Exact Match, the fraction of answers that match the reference exactly, and token-level F1, which gives partial credit for overlap. Both inherit the morphology problem: an answer that is correct but inflected differently from the reference can score zero on Exact Match, so F1 and a human check are needed alongside it. For generative QA, where the answer is free text, automatic scoring is even less reliable, and native-speaker human evaluation is the dependable measure.
