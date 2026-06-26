@@ -993,6 +993,18 @@ main[itemtype="https://schema.org/Blog"] .blog-card:hover {
   backdrop-filter: saturate(150%) blur(10px);
   -webkit-backdrop-filter: saturate(150%) blur(10px);
 }
+/* On mobile the navbar contains the slide-out drawer (.navbar-sidebar), which
+   is position:fixed. backdrop-filter on the navbar would make it the containing
+   block for that drawer, so the drawer would size to the navbar instead of the
+   viewport and the page content would cover it. Drop the blur on mobile and use
+   an opaque bar so the drawer overlays the page correctly. */
+@media (max-width: 996px) {
+  .navbar {
+    background: var(--ifm-background-color);
+    backdrop-filter: none;
+    -webkit-backdrop-filter: none;
+  }
+}
 /* Tighter padding inside each item; grouping comes from the dividers below. */
 .navbar__link {
   font-weight: 600;
