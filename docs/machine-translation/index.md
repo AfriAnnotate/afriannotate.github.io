@@ -6,6 +6,8 @@ title: Machine Translation
 
 Machine translation is one of African NLP's flagship goals and one of its hardest, because it needs parallel data, sentences paired across two languages, that barely exists for most African languages. This chapter follows the pipeline end to end: collecting parallel text, cleaning it, annotating new translations, assuring quality, evaluating, and releasing.
 
+![The machine-translation data lifecycle, from parallel text to a released corpus](images/mt-pipeline.svg)
+
 ## What machine translation needs, and why African languages make it hard
 
 A machine-translation system learns to map text from a source language to a target language. Modern systems are neural, and the strongest are large multilingual models trained on many language pairs at once, which lets a high-resource pair lend statistical strength to a low-resource one. The applications are immediate for African languages: access to health, government, and education information, and participation in a digital world that defaults to a handful of languages. The obstacle is data. Neural translation is hungry for parallel sentences, and for most African languages there are few, scattered across religious texts, the occasional news site, and government documents. What exists online is often unreliable, since an audit of web-mined data found that for many low-resource languages a large share was mislabelled, machine-translated, or not the language at all ([Kreutzer et al., 2022](../references.md#kreutzer-2022)). The community has answered with purpose-built data. Masakhane's MAFAND showed that a few thousand high-quality human translations in the news domain go a long way ([Adelani et al., 2022b](../references.md#mafand-2022)), Meta's NLLB and its FLORES-200 benchmark extended coverage and evaluation to 200 languages including many African ones ([NLLB Team, 2022](../references.md#nllb-2022)), and efforts such as Toucan and Cheetah now target more than 400 African languages. The lesson is consistent: for African translation, building a small amount of good parallel data beats waiting for the web to supply it.
@@ -60,6 +62,10 @@ A translation config shows the source sentence and gives the translator a text b
 ```
 
 For post-editing rather than translation from scratch, pre-fill the box with a machine-translation draft by adding a `value="$mt_draft"` to the `TextArea` and including an `mt_draft` field in each task. The translator then corrects rather than retypes, which is faster, though it carries the known risk that post-editing can anchor the translator to the machine's phrasing, so it suits routine domains more than creative or culturally loaded text.
+
+Post-editing a machine translation in the AfriAnnotate editor:
+
+![Post-editing a machine translation in AfriAnnotate](/afriannotate-demo/01-text-nlp/13-parallel-translation-post-edit/2-labeling-editor.png)
 
 ## Assure quality
 

@@ -6,6 +6,8 @@ title: Automatic Speech Recognition (ASR)
 
 ASR turns spoken audio into text. It is the most developed speech task for African languages and the gateway to the rest, because transcription is the bridge from a recording to something a machine can read. This page covers what is distinctive about building ASR data. The shared recording, consent, and transcription groundwork is in the [Speech overview](../sections/speech.md), and the general pipeline in the Foundations chapters.
 
+![The ASR data concept: audio to faithful transcription to model, evaluated with WER and CER](images/asr-pipeline.svg)
+
 ## What the data looks like
 
 ASR learns from audio paired with accurate transcripts. The kind of audio matters: read speech, where people read prepared sentences, is clean and easy to collect but does not match how people actually talk, while spontaneous speech is realistic but harder to record and transcribe. African ASR now has both, and the recent surge in purpose-built corpora is the main reason the task has moved fastest. African Next Voices recorded roughly 9,000 hours of everyday speech across eighteen languages in Kenya, Nigeria, and South Africa ([African Next Voices, 2025](../references.md#african-next-voices)), NaijaVoices added 1,800 hours of Igbo, Hausa, and Yorùbá ([Emezue et al., 2025](../references.md#emezue-2025)), and Google's WAXAL released a large multilingual African speech set for ASR and TTS ([WAXAL, 2026](../references.md#waxal-2026)). Domain- and accent-focused sets fill the gaps: AfriSpeech-200 gathered 200 hours of accented English for clinical and general use across thirteen countries ([Olatunji et al., 2023](../references.md#afrispeech-2023)), Kallaama covers agricultural speech in three Senegalese languages ([Gauthier et al., 2024](../references.md#kallaama-2024)), Zambezi Voice covers four Zambian languages ([Sikasote et al., 2023](../references.md#zambezi-2023)), and Mozilla's Common Voice crowdsources read speech for several African languages. Self-supervised models like AfriHuBERT now let a little labelled data go further by pretraining on raw audio first ([Alabi et al., 2025](../references.md#afrihubert-2025)).
@@ -49,6 +51,10 @@ A transcription config plays the audio and gives the transcriber a text box, plu
 ```
 
 The `$audio` value is the `audio_filepath` from the manifest above, so the same file feeds collection, transcription, and training without reformatting.
+
+A transcription task in the AfriAnnotate editor: the clip plays above a text box for the transcript.
+
+![Transcribing audio in the AfriAnnotate editor](/afriannotate-demo/03-audio/23-audio-transcription/2-labeling-editor.png)
 
 ## Evaluation
 

@@ -7,6 +7,8 @@ sidebar_position: 3
 
 Once the task is designed and annotators are trained, the workflow decides how labels are produced, checked, and finalised. The central questions are how many people label each item, how work is assigned, and what happens when they disagree.
 
+![Annotation workflow: multiple annotators, agreement, adjudication, and preserving genuine disagreement](images/adjudication-workflow.svg)
+
 ## Use multiple annotators per item
 
 A single annotator's label is a single opinion, and you cannot tell a confident correct call from a confident mistake. Assigning each item to several annotators lets you measure reliability and resolve errors. The common practice for African-language datasets is at least three annotators per item, with an odd number so that a simple majority can settle most cases. The Masakhane named-entity datasets used three native speakers per language under a coordinator, which is enough to catch individual slips while staying affordable for a volunteer team ([Adelani et al., 2022](../references.md#adelani-2022)). More annotators raise reliability and cost together, so the right number is a budget decision as much as a statistical one.

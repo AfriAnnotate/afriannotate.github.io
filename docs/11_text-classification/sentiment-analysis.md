@@ -13,7 +13,7 @@ The Sentiment Analysis Annotation Guidelines Template is a structured framework 
 Sentiment analysis can be annotated into one or more of the following annotation types.
 
 
-![Types of sentiment analysis](images/sentiment-analysis.png)
+![Types of sentiment analysis](images/sentiment-analysis.svg)
 
 
 **Fine-grained (Scaling) analysis:**
@@ -37,4 +37,13 @@ While the types of sentiment targets can differ, the annotation labels can be tw
 
 Examples of sentiment analysis are as follows:
 
-![Sentiment analysis label definition and examples](images/sentiment.png)
+| Label | Decision rule | Example |
+|-------|---------------|---------|
+| Positive | Overall attitude is favorable, even with minor complaints. | "I love this phone, best I've owned." |
+| Negative | Overall attitude is unfavorable. | "This app keeps crashing, useless." |
+| Mixed | Use only when both are clearly present and roughly balanced. | "Great camera but the battery dies fast." |
+| Neutral | Default when no evaluative stance is expressed. | "The package arrived on Tuesday." |
+
+Labeling a sentiment in the AfriAnnotate editor:
+
+![Selecting a sentiment label in AfriAnnotate](/afriannotate-demo/gifs/sentiment-choice.gif)

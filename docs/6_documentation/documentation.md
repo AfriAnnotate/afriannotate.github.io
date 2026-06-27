@@ -7,6 +7,8 @@ title: Documentation and Reporting
 
 A dataset without documentation is hard to trust and easy to misuse. Documentation is what lets someone else understand what your data is, judge whether it fits their purpose, and use it responsibly, and it is what lets you defend how it was made years later. For African-language data, where context and provenance carry extra weight, good documentation is not optional paperwork. It is part of the dataset.
 
+![The three documentation standards: datasheet, data statement, and model card](images/documentation-standards.svg)
+
 ## Use a standard, do not invent one
 
 Three established standards cover most of what a dataset needs, and using them means others already know how to read your documentation. A **datasheet** describes a dataset's motivation, composition, collection process, recommended uses, and limitations, travelling with the data the way a datasheet travels with an electronic component ([Gebru et al., 2021](../references.md#gebru-2021)). A **data statement** focuses on the linguistic and demographic context that NLP data needs, recording who the speakers and annotators are, which language varieties are covered, and how that shapes what the data can be used for ([Bender & Friedman, 2018](../references.md#bender-friedman-2018)). A **model card** does the same for a model trained on the data, stating its intended use, its performance across groups, and its limitations ([Mitchell et al., 2019](../references.md#mitchell-2019)). For African datasets the data statement is especially valuable, because the precise language, variety, region, and speaker profile are exactly the details that determine whether the data is fit for a given use, and exactly the details that get lost when they are not written down.

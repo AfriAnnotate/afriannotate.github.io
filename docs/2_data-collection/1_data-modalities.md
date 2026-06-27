@@ -7,6 +7,8 @@ description: What data modality means, why it's the first fork in the road for a
 
 Learn what data modality means, why it's the first decision in any collection plan, and how it shapes cost, sourcing, and tooling long before anyone writes an annotation guideline.
 
+![The data modalities for African-language datasets and what each needs](images/data-modalities.svg)
+
 ## What a modality is
 
 A **data modality** is the format a piece of data takes — text, image, audio, video, or some structured combination of these. Each modality encodes information differently and needs different tools to capture, store, and process it. A sentence and a photograph might describe the same painting, but one is a sequence of discrete symbols and the other is a dense grid of pixel values; nothing about how you collect, store, or validate one transfers directly to the other.

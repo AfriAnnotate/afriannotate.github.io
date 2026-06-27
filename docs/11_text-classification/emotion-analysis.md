@@ -15,7 +15,13 @@ Emotion annotation goes a step further than sentiment analysis by analyzing spec
 
 In single-label annotation, a text has either no emotion or only one of the emotions for the given list of emotions; each text is assigned one dominant emotion.
 
-![Single-label emotion](images/single-emotion.png)
+| Id | Text | Emotion |
+|----|------|---------|
+| sample_01 | Never saw him again. | Sadness |
+| sample_02 | I love telling this story. | Joy |
+| sample_03 | How stupid of him. | Anger |
+| sample_04 | None of us did. | Neutral |
+| sample_05 | I can't believe it! I won the scholarship! This is amazing! | Joy |
 
 
 ### Multi-label Emotion Analysis
@@ -74,7 +80,13 @@ Since we have a scale from 0 to 3, a threshold of 0.5  can be a good choice. The
 
 This method combines both agreement among annotators and the intensity of the emotion, providing a balanced evaluation. Majority vote does not consider the intensity and may miss out on subtle emotional content. A sample format of the multi-label emotion dataset is shown below. The final binary emotion labels are then derived using the aggregation procedure described above.
 
-![Multi-label format](images/multi-label-emotion-format.png)
+| Id | Text | Anger | Fear | Joy | Sadness | Surprise |
+|----|------|:-----:|:----:|:---:|:-------:|:--------:|
+| sample_01 | Never saw him again. | 0 | 0 | 0 | 1 | 0 |
+| sample_02 | I love telling this story. | 0 | 0 | 1 | 0 | 0 |
+| sample_03 | How stupid of him. | 1 | 0 | 0 | 0 | 0 |
+| sample_04 | None of us did. | 0 | 0 | 0 | 0 | 0 |
+| sample_05 | I can't believe it! I won the scholarship! This is amazing! | 0 | 0 | 1 | 0 | 1 |
 
 ### Emotion Intensity
 
@@ -108,6 +120,12 @@ Example 4:
 
 A sample format of the multi-label emotion intensities dataset is shown below. Each emotion is assigned an intensity score ranging from 0 (not present) to 3 (high intensity). 
 
-![Multi-label intensity](images/multi-label-intensity.png)
+| Id | Text | Anger | Fear | Joy | Sadness | Surprise |
+|----|------|:-----:|:----:|:---:|:-------:|:--------:|
+| sample_01 | Never saw him again. | 0 | 0 | 0 | 2 | 0 |
+| sample_02 | I love telling this story. | 0 | 0 | 2 | 0 | 0 |
+| sample_03 | How stupid of him. | 2 | 0 | 0 | 0 | 0 |
+| sample_04 | None of us did. | 0 | 0 | 0 | 0 | 0 |
+| sample_05 | I can't believe it! I won the scholarship! This is amazing! | 0 | 0 | 3 | 0 | 3 |
 
 

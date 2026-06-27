@@ -14,7 +14,7 @@ Data source is the place where we get the data (text, audio, image or any of the
 
 **Common Data Sources**: Selecting data sources that are relevant, ethical, and representative is essential for building high-quality text classification datasets such as sentiment, emotion, and hate speech datasets. Common sources include social media platforms such as Twitter (X), Facebook, Reddit, YouTube, TikTok, Telegram, and WhatsApp, which provide rich and real-time user opinions but often contain noisy and informal language. Product review platforms such as Amazon typically offer clearer sentiment signals, while forums, blogs, and news comment sections provide diverse viewpoints and discussions. Researchers may also collect data through surveys or controlled studies, which generally produce cleaner but smaller datasets. Additionally, existing benchmark datasets can accelerate research and enable comparison with prior work, although they may not always align with the target domain, language, or cultural context.
 
-![Data sources](images/data-sources.png)
+![Data sources](images/data-sources.svg)
 
 :::info[Tips ]
 When selecting a source, prefer data that naturally contains the phenomenon of interest. For example, if the goal is to study offensive speech, choose platforms where interpersonal conflict or public debate is common. If the goal is to study sentiment, choose sources where opinions, reviews, and evaluations are frequent.
@@ -47,7 +47,7 @@ selected = df[df["matched"]]
 print(len(selected), "candidate texts enriched for the task")
 ```
 
-![Keyword based selection](images/keyword-based.png)
+![Keyword based selection](images/keyword-based.svg)
 
 **Location-based Selection:** Is a data collection approach where texts are gathered based on the geographic location associated with users or posts. For example, when collecting social media data from X (formerly Twitter), researchers can filter posts originating from specific locations such as Ethiopia, Nigeria, or Kenya. This method is useful for studying regional language variation, local opinions, cultural expressions, or location-specific events, as it helps ensure that the collected data represents the target geographic area.
 
@@ -63,7 +63,7 @@ geo = [p for p in posts if in_region(p)]
 print(len(geo), "geotagged posts (note: usually only ~1-3% are geotagged)")
 ```
 
-![Location based selection](images/location-based.png)
+![Location based selection](images/location-based.svg)
 
 **Distant supervision:** Is a method for automatically creating labeled training data by using existing knowledge sources instead of manual annotation. For example, for emotion classification, social media posts containing hashtags such as **#happy**, **#joy**, or **#sad** can be automatically labeled with the corresponding emotions. This approach enables the creation of large training datasets quickly and cheaply, although some automatically assigned labels may be incorrect or noisy.
 
@@ -81,7 +81,7 @@ def weak_label(text):
 df["weak"] = df["text"].apply(weak_label)
 ```
 
-![Distant based sample selection](images/distant-based.png)
+![Distant based sample selection](images/distant-based.svg)
 
 **Random Sampling**: Select items uniformly at random from the corpus with no targeting criteria. This is the baseline for any annotation project, ensuring an unbiased estimate of the true corpus-level label distribution.
 
@@ -98,7 +98,7 @@ strat, _ = train_test_split(df, train_size=2000,
 print(strat["weak"].value_counts(normalize=True))
 ```
 
-![Random sample selection](images/random-sampling.png)
+![Random sample selection](images/random-sampling.svg)
 
 **Active Learning Method**: Iteratively train a model on a small seed set, then use the model's uncertainty to select the most informative unlabelled examples for human annotation next. Maximizes annotation return on investment by labeling only where the model is confused.
 
@@ -112,11 +112,11 @@ to_label = np.argsort(margin)[:100]       # 100 most ambiguous items
 print("Send these to annotators next:", to_label)
 ```
 
-![Active learning-based sample selection](images/active-learning.png)
+![Active learning-based sample selection](images/active-learning.svg)
 
 **Stratified Sampling**: Divide the corpus into strata — subgroups by class, source, time period, or demographic — and sample proportionally or equally from each. Ensures minority classes and subgroups are always represented in the annotation set.
 
-![Stratified sample selection](images/stratified-sampling.png)
+![Stratified sample selection](images/stratified-sampling.svg)
 
 #### Collection strategy guide
 - Use keyword/dictionary-based selection when you need to target specific phenomena such as hate-related expressions or emotion lexicons.
@@ -128,7 +128,15 @@ print("Send these to annotators next:", to_label)
 Any combination of the above also works well to filter quality data.
 
 #### Comparisons of data selection methods
-![Types of sentiment analysis](images/methods.png)
+
+| Method | Cost | Label noise | Bias risk | Best for |
+|--------|------|-------------|-----------|----------|
+| Keyword / lexicon | Low | — | High (toward keywords) | Hate speech, rare phenomena |
+| Location-based | Low | — | Medium | Dialect / regional studies |
+| Distant supervision | Low | High | Medium | Large weakly-labelled emotion sets |
+| Random sampling | Low | — | None | Estimating true distribution |
+| Stratified | Medium | — | Low | Guaranteeing rare-class coverage |
+| Active learning | High setup | — | Toward decision boundary | Maximising labels-per-dollar |
 
 :::info[Tips ]
 Always store metadata such as source, timestamp, language, and collection method. This makes later analysis, error inspection, and dataset documentation much easier.
@@ -144,7 +152,7 @@ Once the data source has been identified, several preprocessing and sampling ste
 Keep a copy of the raw data and a separate processed version. Never overwrite the original collection, because later decisions may need to be audited or reversed.
 :::
 
-![Data processing pipeline](images/data-processing.png)
+![Data processing pipeline](images/data-processing.svg)
 
 :::info[Tips ]
 For hate speech and emotion tasks, keyword filtering can help find likely positive cases, but it should never replace careful annotation, because keywords often miss indirect, ironic, or context-dependent expressions.

@@ -25,8 +25,11 @@ These principles are not abstract: they are choices you make in the labeling con
 
 ```xml
 <View>
-  <!-- Show the text the annotator is judging, with room for context. -->
-  <Text name="text" value="$text"/>
+  <!-- The source text sits in its own card so the annotator can always tell
+       the content apart from the instruction prompts and labels below it. -->
+  <View style="background:#FBF7F0; border:1px solid #E7DDCB; border-radius:8px; padding:14px 16px; margin-bottom:18px;">
+    <Text name="text" value="$text"/>
+  </View>
 
   <!-- One choice only, drawn from a fixed set: a typo cannot become
        a new category, and the decision stays a cheap binary-style call. -->
@@ -45,7 +48,11 @@ These principles are not abstract: they are choices you make in the labeling con
 </View>
 ```
 
-Three of the design points above are enforced directly in this config. `choice="single"` with a fixed `<Choice>` set constrains the input to the allowed labels, so the interface, not the guideline document, prevents stray categories. The `hotkey` attributes let an annotator work entirely from the keyboard, which is both faster and gentler on the hands over a long session. And the `flag` block gives the explicit skip route the fatigue discussion calls for, rather than forcing a guess.
+Three of the design points above are enforced directly in this config. `choice="single"` with a fixed `<Choice>` set constrains the input to the allowed labels, so the interface, not the guideline document, prevents stray categories. The `hotkey` attributes let an annotator work entirely from the keyboard, which is both faster and gentler on the hands over a long session. And the `flag` block gives the explicit skip route the fatigue discussion calls for, rather than forcing a guess. Wrapping the text in its own styled `<View>` is a small touch that matters over thousands of items: it sets the content apart from the prompts and labels, so an annotator never confuses what they are reading with what they are being asked.
+
+That configuration renders, for the annotator, as a clean single-task screen where the source text stands out from the question:
+
+![A single-label sentiment task in the AfriAnnotate labeling interface](/afriannotate-demo/01-text-nlp/01-sentiment-classification/3-label-selected.png)
 
 For a span-level task such as named-entity recognition, the same format expresses a harder job by swapping `<Choices>` for `<Labels>`, which lets the annotator select a stretch of text and tag it:
 
@@ -62,3 +69,13 @@ For a span-level task such as named-entity recognition, the same format expresse
 ```
 
 The `$text` field in both configs maps straight onto the `text` field in the cleaned JSONL records from the [Data Collection](../data-collection/data-cleaning-preprocessing) chapter, so the import step is just uploading that file: each line becomes one task, and the provenance fields ride along unchanged. Starting from a tiny config like this, and growing it only when a pilot shows it is needed, keeps the task tractable in the way the complexity discussion above recommends.
+
+Selecting a span and tagging it as an entity, in the AfriAnnotate editor:
+
+![Tagging a named entity in AfriAnnotate](/afriannotate-demo/gifs/ner.gif)
+
+## From a config to a running project
+
+Defining the config is only the first step; loading data and labeling it is the rest. The short walkthrough below shows the full loop, creating a project, uploading a CSV of tasks, choosing the labeling template, and annotating every task:
+
+<video controls width="100%" style={{borderRadius: '10px', border: '1px solid var(--ifm-color-emphasis-200)'}} src="/afriannotate-demo/00-workflow/project-creation/process.mp4"></video>

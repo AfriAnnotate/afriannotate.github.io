@@ -19,7 +19,7 @@ Below is a short definition of the common NLP tasks. The details of each task ar
 - Topic classification answers: What is the main theme or domain of the text?
 
 
-![Text classication NLP tasks taxonomy](images/text-classification.png)
+![Text classication NLP tasks taxonomy](images/text-classification.svg)
 
 :::warning[Define tasks]
 Define the annotation objective before collecting data. A dataset built for sentiment analysis should not be reused for hate speech or emotion analysis without revisiting the label schema and annotation guidelines.

@@ -6,6 +6,8 @@ title: Audio Understanding
 
 Audio understanding covers the speech and sound tasks that are not transcription: classifying what a clip contains, detecting events within it, spotting keywords, or identifying which language is being spoken. These tasks matter for African contexts in ways transcription does not, because much useful audio is not speech to be transcribed but sound to be recognised, from a cough in a health screening to a specific call in a radio broadcast.
 
+![Audio-understanding tasks: classification, event detection, keyword spotting, and language ID](images/audio-understanding-tasks.svg)
+
 ## What the data looks like
 
 Audio-understanding data is audio clips paired with labels, and the label scheme is the heart of the task. The clips can come from radio archives, community recordings, environmental sensors, or call centres, and the labels say what each clip is or contains. Two African-specific points stand out. The taxonomy of labels has to fit local reality rather than a borrowed one, since the relevant sounds, instruments, animals, and acoustic environments differ. And much of the audio is multilingual and code-switched, so even a task as simple as language identification is harder than it looks, which is why African-aware tools matter throughout the [speech pipeline](../sections/speech.md). General multilingual speech corpora such as African Next Voices provide raw material that can be relabelled for understanding tasks ([African Next Voices, 2025](../references.md#african-next-voices)).
@@ -44,3 +46,7 @@ A whole-clip classification config uses multiple-choice over the audio, with `ch
 ```
 
 When instead you need to mark *where* an event happens, not just that it is present, switch `<Choices>` for the `<Labels>` and timeline approach from the [Speaker Diarization](./speaker-diarization) page, which turns the same audio into span-level labels for detection. Score whole-clip classification with macro F1, so rare but important sounds are not drowned out by common ones, and score detection with mean average precision, which checks the model located events in time as well as named them.
+
+Classifying an audio clip in the AfriAnnotate editor:
+
+![Labelling an audio clip in the AfriAnnotate editor](/afriannotate-demo/03-audio/24-audio-event-classification/2-labeling-editor.png)

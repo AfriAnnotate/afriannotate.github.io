@@ -12,6 +12,8 @@ This matters more here than in well-resourced settings, because the same opennes
 Decide with the community who controls the data, get real consent, choose a licence on purpose, protect the people in the data, and make sure the benefits reach the speakers.
 :::
 
+![FAIR and CARE as complementary frameworks: FAIR makes data usable, CARE makes it just](images/fair-care.svg)
+
 ## Govern for the community, not just the dataset
 
 ### Community ownership and self-determination

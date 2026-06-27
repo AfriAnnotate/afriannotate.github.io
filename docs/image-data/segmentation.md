@@ -63,3 +63,9 @@ print("mIoU:", round(np.nanmean(list(ious.values())), 3))
 ```
 
 Averaging IoU across classes rather than across pixels is the deliberate choice: a thin feature like a river covers few pixels, so a pixel-weighted score would let a model ignore it entirely while still looking accurate, whereas per-class mIoU makes that failure visible.
+
+Tracing a polygon and painting a brush mask in AfriAnnotate:
+
+![Tracing a polygon in AfriAnnotate](/afriannotate-demo/gifs/polygon.gif)
+
+![Painting a brush mask in AfriAnnotate](/afriannotate-demo/gifs/brush.gif)

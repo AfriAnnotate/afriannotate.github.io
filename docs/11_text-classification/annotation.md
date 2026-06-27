@@ -14,7 +14,7 @@ Annotator quality is more important than annotator quantity. Recruit annotators 
 
 Effective annotation relies more on the quality and consistency of annotators than on their number. Annotators should be fluent in the target language, familiar with the relevant cultural context, and, when necessary, possess domain-specific knowledge. They should also be detail-oriented and able to apply annotation guidelines consistently to ensure reliable, high-quality labels.
 
-![Annotator selection](images/annotator-selection.png)
+![Annotator selection](images/annotator-selection.svg)
 
 :::info[Tips ]
 Use a short qualification round before the main task. The goal is not only to select competent annotators, but also to identify whether the guidelines are clear enough to be applied consistently.
@@ -33,7 +33,7 @@ Protecting annotator well-being is essential, particularly when working with har
 
 Protecting annotators through informed consent, controlled exposure, breaks, and support systems improves both well-being and annotation quality.
 
-![](images/annotator-safety-and-mental-health-1ijc2ov5oy4.png)
+![](images/annotator-safety-and-mental-health-1ijc2ov5oy4.svg)
 
 For any data annotation such as hate speech, we should create a content warning + opt-in (show before any harmful-content task) like below.
 :::warning[CONTENT WARNING]
@@ -96,7 +96,7 @@ For small annotation efforts, a dedicated platform may be unnecessary. Spreadshe
 
 However, these tools lack the quality-control and management features; they are not recommended beyond small or exploratory datasets.
 
-![Annotation tools](images/annotation-tools.png)
+![Annotation tools](images/annotation-tools.svg)
 
 The annotation tool should match the size and sensitivity of the project. For small pilot studies, spreadsheets may be enough. For medium-sized projects that require labeling workflows, Doccano, AfriAnnotate, or INCEpTION are often suitable. For large projects with distributed workers, crowdsourcing platforms can offer scale, but they require stronger quality control and privacy planning.
 
@@ -106,7 +106,9 @@ Whichever self-hosted tool you choose, the labeling task is defined by a small c
 
 ```xml
 <View>
-  <Text name="text" value="$text"/>
+  <View style="background:#FBF7F0; border:1px solid #E7DDCB; border-radius:8px; padding:14px 16px; margin-bottom:18px;">
+    <Text name="text" value="$text"/>
+  </View>
   <Choices name="sentiment" toName="text" choice="single" required="true">
     <Choice value="Positive" hotkey="1"/>
     <Choice value="Neutral"  hotkey="2"/>
@@ -115,19 +117,26 @@ Whichever self-hosted tool you choose, the labeling task is defined by a small c
 </View>
 ```
 
-Emotion analysis is usually multi-label, since one sentence can carry several emotions at once (see [Emotion Analysis](./emotion-analysis.md)). The only change is `choice="multiple"`, which lets the annotator tick every emotion that applies:
+Emotion analysis is usually multi-label, since one sentence can carry several emotions at once, and each emotion present has its own intensity (see [Emotion Analysis](./emotion-analysis.md)). The cleanest way to capture both is one intensity rating per emotion, so each instance gets several single annotations at once. A rating of zero stars means the emotion is absent:
 
 ```xml
 <View>
-  <Text name="text" value="$text"/>
-  <Choices name="emotions" toName="text" choice="multiple">
-    <Choice value="Joy"      hotkey="1"/>
-    <Choice value="Sadness"  hotkey="2"/>
-    <Choice value="Anger"    hotkey="3"/>
-    <Choice value="Fear"     hotkey="4"/>
-    <Choice value="Surprise" hotkey="5"/>
-    <Choice value="Disgust"  hotkey="6"/>
-  </Choices>
+  <View style="background:#FBF7F0; border:1px solid #E7DDCB; border-radius:8px; padding:14px 16px; margin-bottom:18px;">
+    <Text name="text" value="$text"/>
+  </View>
+  <Header value="Rate each emotion's intensity — no stars = absent, 1 low, 2 medium, 3 high"/>
+  <Header value="Joy"/>
+  <Rating name="joy" toName="text" maxRating="3"/>
+  <Header value="Sadness"/>
+  <Rating name="sadness" toName="text" maxRating="3"/>
+  <Header value="Anger"/>
+  <Rating name="anger" toName="text" maxRating="3"/>
+  <Header value="Fear"/>
+  <Rating name="fear" toName="text" maxRating="3"/>
+  <Header value="Surprise"/>
+  <Rating name="surprise" toName="text" maxRating="3"/>
+  <Header value="Disgust"/>
+  <Rating name="disgust" toName="text" maxRating="3"/>
 </View>
 ```
 
@@ -138,18 +147,24 @@ The data you import is one JSON object per task, with a `data` field whose keys 
 {"data": {"text": "Ban gamsu da yadda aka gudanar da zaben ba."}}
 ```
 
-After annotation, the tool exports each task with the labels attached. For the multi-label emotion config above, an exported record carries the chosen emotions as a list, ready to flow into the agreement script in [Data Quality](../data-quality) or into training:
+After annotation, the tool exports each task with the labels attached. For the per-emotion intensity config above, an exported record carries one rating per emotion (zero meaning absent), ready to flow into the agreement script in [Data Quality](../data-quality) or into training:
 
 ```json
 {
   "data": {"text": "Na gode sosai, wannan labari ya faranta min rai."},
   "annotations": [
     {"completed_by": "annotator_03",
-     "result": [{"from_name": "emotions", "to_name": "text",
-                 "value": {"choices": ["Joy"]}}]}
+     "result": [
+       {"from_name": "joy",   "to_name": "text", "type": "rating", "value": {"rating": 3}},
+       {"from_name": "anger", "to_name": "text", "type": "rating", "value": {"rating": 0}}
+     ]}
   ]
 }
 ```
+
+In the tool, the task list and per-task annotation progress are managed from the data manager:
+
+![The AfriAnnotate data manager for a text-classification project](/afriannotate-demo/01-text-nlp/01-sentiment-classification/1-data-manager.png)
 
 ## Inter-annotator agreement
 

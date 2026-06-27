@@ -69,3 +69,9 @@ print(f"mAP@0.75: {result['map_75']:.3f}")  # stricter: punishes loose boxes
 ```
 
 The gap between the two thresholds is the useful read: a model that scores well at 0.50 but poorly at 0.75 is finding the right objects but boxing them loosely, which matters when the box itself carries the measurement, such as counting tightly packed livestock or delineating a field.
+
+Drawing a box, and placing keypoints, in the AfriAnnotate editor:
+
+![Drawing a bounding box in AfriAnnotate](/afriannotate-demo/gifs/bbox.gif)
+
+![Placing keypoints in AfriAnnotate](/afriannotate-demo/gifs/keypoints.gif)

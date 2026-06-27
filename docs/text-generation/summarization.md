@@ -7,6 +7,8 @@ sidebar_position: 3
 
 Summarization condenses a longer text into a shorter one that preserves its meaning. It comes in two forms. Extractive summarization selects the most important sentences from the source, while abstractive summarization rewrites the content in new words, which is harder and more useful but also more prone to error. For African languages summarization is valuable because it makes long documents in health, news, and government accessible quickly, and it is difficult for the same reason all generation is: scarce training data and morphologically rich languages that defeat simple methods.
 
+![Extractive versus abstractive summarization](images/summarization-types.svg)
+
 ## What the data looks like
 
 Summarization needs documents paired with reference summaries. The most widely used multilingual resource is XL-Sum, built from BBC articles and their professionally written summaries, which covers a number of African languages including Amharic, Hausa, Igbo, Kirundi, Oromo, Nigerian Pidgin, Somali, Swahili, Tigrinya, and Yorùbá ([Hasan et al., 2021](../references.md#xlsum-2021)). Beyond it, summarization data for African languages is sparse, so most projects create their own by pairing source documents with summaries written by native speakers. The same care applies as in machine translation: prefer document-level material from a domain that matters, and watch for source documents that are themselves machine-translated.

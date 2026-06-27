@@ -1119,3 +1119,17 @@ main[itemtype="https://schema.org/Blog"] .blog-card:hover {
   line-height: 1;
   vertical-align: baseline;
 }
+
+/* Tool screenshots & recordings embedded in the docs read as framed figures:
+   rounded corners, a hairline border and a soft shadow lift them off the page
+   so it is clear they are captures of the interface. SVG illustrations already
+   carry their own card, so they are left untouched. */
+.markdown img[src$=".png"],
+.markdown img[src$=".jpg"],
+.markdown img[src$=".gif"],
+.markdown video {
+  border-radius: 10px;
+  border: 1px solid var(--ifm-color-emphasis-200);
+  box-shadow: 0 8px 28px rgba(31, 24, 16, 0.12);
+  margin-block: 0.6rem;
+}

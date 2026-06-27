@@ -7,6 +7,8 @@ sidebar_position: 3
 
 Handwritten text recognition (HTR) reads handwriting rather than print. It is harder than OCR because no two hands are alike, and it is especially valuable in Africa, where a great deal of knowledge, from personal and administrative records to centuries of scholarly manuscripts, exists only in handwriting.
 
+![Handwriting varies by writer, era and region, so HTR data must cover many hands; segment lines then transcribe](images/htr-variation.svg)
+
 ## What the data looks like
 
 An HTR dataset pairs images of handwritten lines or pages with their transcriptions. Offline recognition works from a scanned image, while online recognition also captures the pen strokes as they are written, which needs a digitiser but makes the task easier. The defining challenge is variation, since handwriting differs by writer, era, and region, so a dataset has to cover many hands to generalise. Fidel did this for Amharic by collecting 40,000 handwritten line images from 411 different writers, deliberately capturing a broad range of styles ([Fidel, 2025](../references.md#fidel-2025)). The manuscript tradition adds historical depth and difficulty: a handwritten dataset for Ajami manuscripts in Fulfulde and Hausa had to segment and transcribe centuries-old pages that existing Arabic-script models could not read ([Ajami HTR, 2025](../references.md#ajami-htr-2025)).

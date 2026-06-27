@@ -6,6 +6,8 @@ title: Speech-to-Speech Translation
 
 Speech-to-speech translation (S2ST) takes speech in one language and produces speech in another, the spoken equivalent of a human interpreter. For African languages it is the most ambitious speech task and the least resourced, because it sits on top of three hard tasks at once. This page is short by necessity: dedicated African S2ST data barely exists yet, so the practical advice is about how to assemble it from the pieces you do have.
 
+![Cascaded (ASR to MT to TTS) versus direct speech-to-speech translation](images/s2st-cascaded-direct.svg)
+
 ## Cascaded and direct, and what each needs
 
 There are two ways to build S2ST. A cascaded system chains three components, ASR to transcribe the source speech, machine translation to translate the text, and TTS to speak the result, while a direct system learns to map source speech to target speech in one step. For African languages the cascaded route is almost always the realistic one today, because it can reuse the ASR, MT, and TTS datasets covered elsewhere in this section rather than requiring scarce end-to-end speech-translation pairs. The cost of cascading is that errors compound: a mistake in transcription becomes a mistranslation becomes a wrong word spoken aloud. Direct systems avoid that but need paired source-and-target speech that, for most African language pairs, no one has collected.
