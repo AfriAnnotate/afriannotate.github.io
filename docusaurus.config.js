@@ -67,6 +67,7 @@ const config = {
 
   clientModules: [
     require.resolve("./src/clientModules/githubStars.js"),
+    require.resolve("./src/clientModules/externalLinks.js"),
   ],
 
   // Cloudflare Web Analytics — privacy-friendly, no cookies, no consent banner needed.
@@ -384,7 +385,11 @@ const config = {
         disableInDev: false,
       },
     ],
-    [
+    // PWA only matters for production (offline service worker). Loading it in
+    // the dev server intermittently fails to resolve @theme/PwaReloadPopup, so
+    // it is enabled for production builds only.
+    ...(process.env.NODE_ENV === "production"
+      ? [[
       "@docusaurus/plugin-pwa",
       {
         debug: false,
@@ -426,7 +431,8 @@ const config = {
           },
         ],
       },
-    ],
+    ]]
+      : []),
   ],
 
   themes: [

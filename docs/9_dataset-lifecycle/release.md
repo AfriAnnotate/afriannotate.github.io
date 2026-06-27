@@ -17,4 +17,25 @@ Releasing a dataset is the moment the work becomes useful to others, and a clear
 - **Baselines and splits provided.** Official train, development, and test splits, and at least baseline results, so others can compare fairly (see [Evaluation](../8_model-building/starter-kit.md)).
 - **Public access ensured.** Hosted where the community can find it, such as Hugging Face, Zenodo, or the Lanfrica catalogue, with a stable identifier.
 
+## Publishing to a hub
+
+Once the boxes are ticked, publishing the fixed splits is short with the Hugging Face `datasets` library, which gives versioning and a documentation page in one step:
+
+```python
+# pip install datasets
+from datasets import load_dataset
+
+# Load the fixed splits produced in earlier chapters.
+dataset = load_dataset("json", data_files={
+    "train": "data/train.jsonl",
+    "validation": "data/dev.jsonl",
+    "test": "data/test.jsonl",
+})
+
+# Publish with a version tag so others can cite the exact data they used.
+dataset.push_to_hub("your-org/hausa-news-2026", revision="v1.1.0")
+```
+
+Two notes specific to responsible release. Set the licence on the repository to match the one in your [dataset card](../6_documentation/documentation.md), so the terms travel with the data rather than living only in a separate document. And if you kept a private held-out portion to guard against contamination (see [Data Integrity](../8_model-building/data-integrity.md)), publish only the public splits here and keep the private set off the hub.
+
 A dataset that ticks every box is one the world can find, trust, reuse, and build on, which is the whole point of building it.

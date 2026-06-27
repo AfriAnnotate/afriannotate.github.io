@@ -13,4 +13,37 @@ Three established standards cover most of what a dataset needs, and using them m
 
 ## Document the things people most need, and most often omit
 
-Whatever template you use, three things matter most and are most often skipped. Record the **languages and varieties precisely**, naming the language, script, region, and register rather than a vague label like "Swahili." Be honest about **limitations and failure cases**, since every dataset has gaps, biases, and conditions where it should not be used, and stating them is a strength rather than an admission of weakness. And make the collection **transparent**, recording where the data came from, from whom, under what consent, and how it was processed, which is the provenance the [data governance](../data-governance/index.md) chapter depends on. A reusable datasheet template is included with this playbook's [templates](./templates.md).
+Whatever template you use, three things matter most and are most often skipped. Record the **languages and varieties precisely**, naming the language, script, region, and register rather than a vague label like "Swahili." Be honest about **limitations and failure cases**, since every dataset has gaps, biases, and conditions where it should not be used, and stating them is a strength rather than an admission of weakness. And make the collection **transparent**, recording where the data came from, from whom, under what consent, and how it was processed, which is the provenance the [data governance](../data-governance/index.md) chapter depends on.
+
+A data statement captures exactly these linguistic and demographic details in a short, readable file that travels with the data. This is a fuller, human-facing companion to the machine-readable [dataset card](../2_data-collection/8_data-provenance-traceability.md) from Data Collection, and a starting template looks like this:
+
+```yaml
+# data-statement.yaml  (after Bender & Friedman, 2018)
+languages:
+  - name: Hausa
+    iso639_3: hau
+    script: Latn
+    region: Kano, northern Nigeria
+    register: news / formal written
+
+curation_rationale: >
+  Collected to support sentiment analysis for northern Nigerian media.
+
+speakers:                 # who produced the source language
+  description: professional journalists writing for a news outlet
+  varieties: Kananci (the Kano dialect)
+
+annotators:               # who labelled it
+  count: 5
+  background: native Hausa speakers from Kano, university-educated
+  recruitment: recruited and paid per the project's consent form
+
+speech_situation:
+  medium: written text (published articles)
+  time_period: 2024-2026
+
+known_limitations: >
+  Formal register only; under-represents spoken and rural varieties.
+```
+
+The `speakers` and `annotators` blocks are the heart of it: naming who produced and who labelled the data, with their variety and background, is what tells a reuser whether the dataset fits their context, and it is exactly what gets lost without a template. This and the other reusable templates are listed on the [templates](./templates.md) page.

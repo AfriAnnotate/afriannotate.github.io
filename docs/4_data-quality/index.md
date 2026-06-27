@@ -10,7 +10,58 @@ Quality is not a final inspection you run before release. It is a discipline you
 
 ## Measure inter-annotator agreement
 
-When several people label the same items, agreement tells you whether the labels are reliable or just one person's opinion repeated. Raw percentage agreement is easy to read but misleading, because some agreement happens by chance, so use a chance-corrected measure: Cohen's kappa for two annotators, Fleiss' kappa for three or more, and Krippendorff's alpha when annotations are missing or the labels are ordinal. Production-grade work often targets an alpha above 0.8, though the right threshold depends on how subjective the task is. African datasets show the full range in practice. MasakhaNER reached high agreement by training annotators in workshops where they discussed disagreements ([Adelani et al., 2022](../references.md#adelani-2022)), AfriSenti held sentiment agreement above 0.70 ([Muhammad et al., 2023](../references.md#muhammad-2023)), the Thiomi multimodal corpus kept Fleiss' kappa above 0.82 ([Thiomi Dataset, 2026](../references.md#thiomi-2026)), and AfriHate reported Randolph's kappa between 0.46 and 0.81 across its hate-speech datasets ([Muhammad et al., 2025](../references.md#afrihate-2025)). Lower numbers are not automatically a failure: on genuinely subjective tasks they can reflect real interpretive variation rather than sloppiness ([Plank, 2022](../references.md#plank-2022)). The worked formulas and code live in the task chapters; here the point is to choose the right metric and read it honestly. 
+When several people label the same items, agreement tells you whether the labels are reliable or just one person's opinion repeated. Raw percentage agreement is easy to read but misleading, because some agreement happens by chance, so use a chance-corrected measure: [Cohen's kappa](https://scikit-learn.org/stable/modules/generated/sklearn.metrics.cohen_kappa_score.html) for two annotators, [Fleiss' kappa](https://www.statsmodels.org/stable/generated/statsmodels.stats.inter_rater.fleiss_kappa.html) for three or more, and [Krippendorff's alpha](https://pypi.org/project/krippendorff/) when annotations are missing or the labels are ordinal. Production-grade work often targets an alpha above 0.8, though the right threshold depends on how subjective the task is. African datasets show the full range in practice. MasakhaNER reached high agreement by training annotators in workshops where they discussed disagreements ([Adelani et al., 2022](../references.md#adelani-2022)), AfriSenti held sentiment agreement above 0.70 ([Muhammad et al., 2023](../references.md#muhammad-2023)), the Thiomi multimodal corpus kept Fleiss' kappa above 0.82 ([Thiomi Dataset, 2026](../references.md#thiomi-2026)), and AfriHate reported Randolph's kappa between 0.46 and 0.81 across its hate-speech datasets ([Muhammad et al., 2025](../references.md#afrihate-2025)). Lower numbers are not automatically a failure: on genuinely subjective tasks they can reflect real interpretive variation rather than sloppiness ([Plank, 2022](../references.md#plank-2022)). The worked formulas and code live in the task chapters; here the point is to choose the right metric and read it honestly.
+
+Once you have chosen the metric, computing it on an exported annotation file is short. Tools using the Label Studio configuration format export annotations as JSON, so a task carries the labels every annotator gave it. The script below builds the annotator-by-item matrix from that export and reports the right statistic for the number of annotators, using established libraries rather than a hand-rolled formula.
+
+```python
+import json
+from collections import defaultdict
+
+from sklearn.metrics import cohen_kappa_score   # pip install scikit-learn
+from statsmodels.stats.inter_rater import fleiss_kappa, aggregate_raters
+
+
+def load_labels(export_path: str, from_name: str = "sentiment") -> dict:
+    """From a Label Studio-format JSON export, return
+    {task_id: {annotator: label}} for one labeling field."""
+    by_task = defaultdict(dict)
+    with open(export_path, encoding="utf-8") as f:
+        tasks = json.load(f)
+    for task in tasks:
+        for ann in task.get("annotations", []):
+            who = ann.get("completed_by", "unknown")
+            for result in ann.get("result", []):
+                if result.get("from_name") != from_name:
+                    continue
+                choice = result["value"]["choices"][0]   # single-choice task
+                by_task[task["id"]][who] = choice
+    return by_task
+
+
+def agreement(by_task: dict) -> None:
+    # Keep only items every annotator labelled, so the comparison is fair.
+    annotators = sorted({a for labels in by_task.values() for a in labels})
+    shared = {t: l for t, l in by_task.items() if len(l) == len(annotators)}
+    print(f"{len(annotators)} annotators, {len(shared)} commonly-labelled items")
+
+    if len(annotators) == 2:
+        a, b = annotators
+        y1 = [shared[t][a] for t in shared]
+        y2 = [shared[t][b] for t in shared]
+        print(f"Cohen's kappa: {cohen_kappa_score(y1, y2):.3f}")
+    else:
+        # Fleiss' kappa expects an items x categories count table.
+        table = [[shared[t][a] for a in annotators] for t in shared]
+        counts, _ = aggregate_raters(table)
+        print(f"Fleiss' kappa: {fleiss_kappa(counts):.3f}")
+
+
+if __name__ == "__main__":
+    agreement(load_labels("afriannotate_export.json"))
+```
+
+Reading agreement once at the end hides the drift this chapter warns about. The same export carries an annotation timestamp, so the same matrix can be split by batch or by time and scored separately, which is exactly how the Setswana sentiment corpus surfaced annotators slowly diverging across its eight batches ([Abdulmumin et al., 2026](../references.md#abdulmumin-2026)). When labels are ordinal or annotators skip items, swap these functions for Krippendorff's alpha (the `krippendorff` package), which handles both cases that kappa does not.
 
 ## Use gold data and control checks
 

@@ -81,6 +81,7 @@ In-house tools are typically open-source applications that can be customized, de
 
 Common self-hosted tools include:
 
+- AfriAnnotate — the playbook's companion annotation tool, built on the Label Studio configuration format — [https://docs.afriannotate.org](https://docs.afriannotate.org)
 - POTATO — Portable Text Annotation Tool — [https://github.com/davidjurgens/potato](https://github.com/davidjurgens/potato)
 - Label Studio (open-source edition) — [https://labelstud.io](https://labelstud.io/)
 - Doccano — [https://github.com/doccano/doccano](https://github.com/doccano/doccano)
@@ -97,7 +98,58 @@ However, these tools lack the quality-control and management features; they are 
 
 ![Annotation tools](images/annotation-tools.png)
 
-The annotation tool should match the size and sensitivity of the project. For small pilot studies, spreadsheets may be enough. For medium-sized projects that require labeling workflows, Doccano, Label Studio, or INCEpTION are often suitable. For large projects with distributed workers, crowdsourcing platforms can offer scale, but they require stronger quality control and privacy planning.
+The annotation tool should match the size and sensitivity of the project. For small pilot studies, spreadsheets may be enough. For medium-sized projects that require labeling workflows, Doccano, AfriAnnotate, or INCEpTION are often suitable. For large projects with distributed workers, crowdsourcing platforms can offer scale, but they require stronger quality control and privacy planning.
+
+#### A labeling configuration
+
+Whichever self-hosted tool you choose, the labeling task is defined by a small configuration. The examples here use the Label Studio configuration format, an open XML format supported by several tools (AfriAnnotate among them), so the same config is portable. The design points above (constrained inputs, keyboard shortcuts, an explicit skip route) are expressed directly in it. A single-label sentiment task looks like this:
+
+```xml
+<View>
+  <Text name="text" value="$text"/>
+  <Choices name="sentiment" toName="text" choice="single" required="true">
+    <Choice value="Positive" hotkey="1"/>
+    <Choice value="Neutral"  hotkey="2"/>
+    <Choice value="Negative" hotkey="3"/>
+  </Choices>
+</View>
+```
+
+Emotion analysis is usually multi-label, since one sentence can carry several emotions at once (see [Emotion Analysis](./emotion-analysis.md)). The only change is `choice="multiple"`, which lets the annotator tick every emotion that applies:
+
+```xml
+<View>
+  <Text name="text" value="$text"/>
+  <Choices name="emotions" toName="text" choice="multiple">
+    <Choice value="Joy"      hotkey="1"/>
+    <Choice value="Sadness"  hotkey="2"/>
+    <Choice value="Anger"    hotkey="3"/>
+    <Choice value="Fear"     hotkey="4"/>
+    <Choice value="Surprise" hotkey="5"/>
+    <Choice value="Disgust"  hotkey="6"/>
+  </Choices>
+</View>
+```
+
+The data you import is one JSON object per task, with a `data` field whose keys match the `value="$..."` references in the config:
+
+```json
+{"data": {"text": "Na gode sosai, wannan labari ya faranta min rai."}}
+{"data": {"text": "Ban gamsu da yadda aka gudanar da zaben ba."}}
+```
+
+After annotation, the tool exports each task with the labels attached. For the multi-label emotion config above, an exported record carries the chosen emotions as a list, ready to flow into the agreement script in [Data Quality](../data-quality) or into training:
+
+```json
+{
+  "data": {"text": "Na gode sosai, wannan labari ya faranta min rai."},
+  "annotations": [
+    {"completed_by": "annotator_03",
+     "result": [{"from_name": "emotions", "to_name": "text",
+                 "value": {"choices": ["Joy"]}}]}
+  ]
+}
+```
 
 ## Inter-annotator agreement
 

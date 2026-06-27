@@ -11,8 +11,8 @@ Text classification is a supervised NLP task in which a text is assigned one or 
 This chapter is designed for dataset creation and annotation. It does not cover downstream model training in detail, but the annotated outputs can later be used for classification, retrieval, moderation, or analytics pipelines.
 :::
 
-### **Task distinction**
-The belwoi is a short definition of the common NLP tasks. the ditails of each task is discused later.
+### Task distinction
+Below is a short definition of the common NLP tasks. The details of each task are discussed later.
 - Sentiment analysis answers: Is the text positive, negative, neutral, or mixed?
 - Emotion analysis answers: What emotion or emotions are expressed?
 - Hate speech analysis answers: Does the text contain hateful, offensive, or discriminatory language, and who is targeted?

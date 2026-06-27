@@ -1101,3 +1101,21 @@ main[itemtype="https://schema.org/Blog"] .blog-card:hover {
   color: var(--ifm-color-primary);
   background: rgba(var(--brand-rgb), 0.07);
 }
+
+/* External links in page content: the conventional underline + outward arrow,
+   so a reader can tell a link leaves the site (citations, formula references,
+   etc.). New-tab behaviour is added in src/clientModules/externalLinks.js. */
+.markdown a[href^="http://"]:not(:has(img)),
+.markdown a[href^="https://"]:not(:has(img)) {
+  text-decoration: underline;
+  text-underline-offset: 2px;
+}
+.markdown a[href^="http://"]:not(:has(img))::after,
+.markdown a[href^="https://"]:not(:has(img))::after {
+  content: "\2197"; /* ↗ outward arrow */
+  display: inline-block;
+  margin-left: 0.12em;
+  font-size: 0.8em;
+  line-height: 1;
+  vertical-align: baseline;
+}

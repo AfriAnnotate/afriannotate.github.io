@@ -17,3 +17,21 @@ If you collect S2ST data directly, the unit is aligned speech across two languag
 ## Evaluation
 
 S2ST is usually evaluated by transcribing the spoken output and scoring that text against a reference translation, an approach often called ASR-BLEU, with chrF preferred over BLEU for the same morphology reasons as in text translation. Newer speech-aware metrics such as BLASER score the translation directly from the audio. None of these captures whether the output sounds natural and says the right thing, so human evaluation by people fluent in both languages remains essential.
+
+The ASR-BLEU approach is two steps: transcribe the spoken output with an ASR model, then score that text against the reference translation, using chrF for the same morphology reasons as in text translation:
+
+```python
+# pip install sacrebleu  (plus an ASR model for the target language)
+import sacrebleu
+
+# Step 1: run ASR on the synthesized target-language audio to get text.
+#   hypotheses = [asr_model.transcribe(path) for path in generated_audio]
+hypotheses = ["asibitin yana budewa da karfe takwas na safe"]
+references = [["asibitin yana budewa da karfe takwas da safe"]]
+
+# Step 2: score the transcribed output against the reference translation.
+chrf = sacrebleu.corpus_chrf(hypotheses, references)
+print(f"ASR-chrF: {chrf.score:.2f}")
+```
+
+One caution specific to this cascade: the score now blends two error sources, the translation and the ASR model used to read it back, so a poor number can mean a bad translation or simply a weak target-language recognizer. For most African target languages the ASR step is itself under-resourced, so interpret ASR-BLEU as a loose proxy and lean harder on the human evaluation than you would for text translation.

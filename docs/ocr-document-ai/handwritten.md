@@ -14,3 +14,21 @@ An HTR dataset pairs images of handwritten lines or pages with their transcripti
 ## Annotation and evaluation
 
 HTR annotation is transcription plus segmentation, since the lines and regions of a handwritten page must be marked before they are transcribed, and historical manuscripts often need an expert who can read both the hand and the historical orthography. Settle conventions for unclear characters, abbreviations, and scribal marks before starting. Like OCR, HTR is evaluated with Character Error Rate as the main metric and Word Error Rate alongside it, with CER again the fairer measure for these scripts.
+
+Because the page must be segmented before it is transcribed, the config does both at once: the annotator draws a box around each line and types its transcription right there, using a per-region text box so each transcript stays attached to the line it belongs to:
+
+```xml
+<View>
+  <Image name="page" value="$image"/>
+  <RectangleLabels name="region" toName="page">
+    <Label value="Text line"  background="#1F5B3F"/>
+    <Label value="Marginalia" background="#C66A3D"/>
+    <Label value="Unclear"    background="#9C4F2B"/>
+  </RectangleLabels>
+  <TextArea name="transcription" toName="page" perRegion="true"
+            editable="true" rows="2"
+            placeholder="Transcribe this line, following the manuscript conventions"/>
+</View>
+```
+
+The `perRegion="true"` attribute is what binds a transcription to its box, so the export gives you each line image region together with its text, ready to score with the same CER tooling as OCR. The `Unclear` label gives an expert reading a faded or damaged manuscript an honest way to mark what cannot be read with confidence, rather than guessing.
